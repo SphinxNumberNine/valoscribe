@@ -277,7 +277,11 @@ class GameStateManager:
                 }
                 log.warning(f"Could not match {agent_name} to {team_name} in VLR metadata, using placeholder")
 
-            trackers.append(PlayerStateTracker(player_index=scoreboard_idx, metadata=metadata))
+            trackers.append(PlayerStateTracker(
+                player_index=scoreboard_idx,
+                metadata=metadata,
+                agent_config=self.state_validator.agent_config,
+            ))
 
         self.player_trackers = trackers
         log.info(f"Initialized {len(trackers)} player trackers from detected agents")
@@ -698,7 +702,7 @@ class GameStateManager:
 
                 # Step 4: Update the matched player tracker (no event generation in preround)
                 if detections:
-                    matching_tracker.update(detections, timestamp)
+                    matching_tracker.update(detections, timestamp, allow_charge_increase=True)
 
         # Check for score changes during preround (indicates previous round ended)
         # This handles cases where score detection failed during ACTIVE_ROUND→PREROUND transition

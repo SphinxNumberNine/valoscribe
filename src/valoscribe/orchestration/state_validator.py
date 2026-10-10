@@ -32,7 +32,7 @@ class StateValidator:
                              (default: src/valoscribe/config/agents_champs2025.json)
         """
         if agent_config_path is None:
-            agent_config_path = Path("src/valoscribe/config/agents_champs2025.json")
+            agent_config_path = Path(__file__).parent.parent / "config" / "agents_champs2025.json"
 
         self.agent_config = self._load_agent_config(agent_config_path)
 

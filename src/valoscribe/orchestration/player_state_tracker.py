@@ -29,10 +29,14 @@ class PlayerStateTracker:
     # Grace period after round start (seconds) - no death detection during UI fade-in
     ROUND_START_GRACE_PERIOD = 2.0
 
-    # Class-level agent config cache (shared across all trackers)
-    _agent_config_cache: Optional[dict] = None
-
-    def __init__(self, player_index: int, metadata: Optional[dict] = None, config_path: Optional[Path] = None):
+    def __init__(
+        self,
+        player_index: int,
+        metadata: Optional[dict] = None,
+        config_path: Optional[Path] = None,
+        *,
+        agent_config: Optional[dict] = None,
+    ):
         """
         Initialize player state tracker.
 
@@ -42,7 +46,8 @@ class PlayerStateTracker:
                 - name: Player name
                 - team: Team name
                 - agent: Agent name
-            config_path: Optional path to agent config JSON (default: config/champs2025.json)
+            config_path: Optional path to agent rules (default: agents_champs2025.json)
+            agent_config: Already loaded rules shared by the processing session
         """
         if not 0 <= player_index <= 9:
             raise ValueError(f"Invalid player index: {player_index}, must be 0-9")
@@ -56,9 +61,9 @@ class PlayerStateTracker:
             "agent": "unknown",
         }
 
-        # Load agent config (shared across all trackers)
-        if PlayerStateTracker._agent_config_cache is None:
-            PlayerStateTracker._agent_config_cache = self._load_agent_config(config_path)
+        self.agent_config = (
+            agent_config if agent_config is not None else self._load_agent_config(config_path)
+        )
 
         # Current state
         self.current_state = {
@@ -102,21 +107,17 @@ class PlayerStateTracker:
             Dictionary of agent configurations
         """
         if config_path is None:
-            # Default to champs2025.json in config directory
             package_dir = Path(__file__).parent.parent
-            config_path = package_dir / "config" / "champs2025.json"
+            config_path = package_dir / "config" / "agents_champs2025.json"
 
-        try:
-            with open(config_path, "r") as f:
-                config = json.load(f)
-                agents_config = config.get("agents", {})
-                log.debug(f"Loaded agent config from {config_path} ({len(agents_config)} agents)")
-                return agents_config
-        except Exception as e:
-            log.warning(f"Failed to load agent config from {config_path}: {e}")
-            return {}
+        with open(config_path, "r") as f:
+            agents_config = json.load(f)
+        log.debug(f"Loaded agent config from {config_path} ({len(agents_config)} agents)")
+        return agents_config
 
-    def update(self, detections: dict, timestamp: float) -> None:
+    def update(
+        self, detections: dict, timestamp: float, *, allow_charge_increase: bool = False
+    ) -> None:
         """
         Update player state from detections.
 
@@ -129,6 +130,8 @@ class PlayerStateTracker:
                 - ability_3: AbilityInfo or None
                 - ultimate: UltimateInfo or None
             timestamp: Current timestamp (seconds)
+            allow_charge_increase: Allow buying/refunding utility during preround;
+                maximum charge limits still apply
         """
         # Copy current → previous
         self.previous_state = self.current_state.copy()
@@ -145,11 +148,17 @@ class PlayerStateTracker:
         # Update abilities (only if alive) with validation
         if self.current_state["alive"]:
             if detections.get("ability_1"):
-                self._validate_and_update_ability("ability_1", detections["ability_1"].charges)
+                self._validate_and_update_ability(
+                    "ability_1", detections["ability_1"].charges, allow_charge_increase
+                )
             if detections.get("ability_2"):
-                self._validate_and_update_ability("ability_2", detections["ability_2"].charges)
+                self._validate_and_update_ability(
+                    "ability_2", detections["ability_2"].charges, allow_charge_increase
+                )
             if detections.get("ability_3"):
-                self._validate_and_update_ability("ability_3", detections["ability_3"].charges)
+                self._validate_and_update_ability(
+                    "ability_3", detections["ability_3"].charges, allow_charge_increase
+                )
 
         # Update ultimate (for all players, alive or dead)
         if detections.get("ultimate"):
@@ -270,7 +279,9 @@ class PlayerStateTracker:
                 # Reset death tracking since we're already dead
                 self.death_candidate_count = 0
 
-    def _validate_and_update_ability(self, ability_key: str, detected_charges: int) -> None:
+    def _validate_and_update_ability(
+        self, ability_key: str, detected_charges: int, allow_charge_increase: bool = False
+    ) -> None:
         """
         Validate ability charges and update state if valid.
 
@@ -288,12 +299,12 @@ class PlayerStateTracker:
         player_name = self.metadata.get("name", f"Player{self.player_index}")
 
         # Get agent config
-        if not PlayerStateTracker._agent_config_cache or agent_name not in PlayerStateTracker._agent_config_cache:
+        if agent_name not in self.agent_config:
             # No config available - accept the detection (can't validate)
             self.current_state[ability_key] = detected_charges
             return
 
-        agent_config = PlayerStateTracker._agent_config_cache[agent_name]
+        agent_config = self.agent_config[agent_name]
 
         # Get ability config
         if ability_key not in agent_config:
@@ -320,7 +331,7 @@ class PlayerStateTracker:
 
         # Validation 2: Check invalid recharge (non-rechargeable ability gained charges)
         if prev_charges is not None and detected_charges > prev_charges:
-            if not rechargeable:
+            if not rechargeable and not allow_charge_increase:
                 log.warning(
                     f"[ABILITY VALIDATION] {player_name} ({agent_name}): {ability_name} is not rechargeable "
                     f"but charges increased {prev_charges}→{detected_charges}. Rejecting misdetection."
