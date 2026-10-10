@@ -192,102 +192,100 @@ def process_vod(
         typer.echo("=" * 80)
         typer.echo("")
 
-    # Open output files
-    with manager.output_writer:
-        # Read frames using VideoReader iterator
-        video_reader = VideoReader(
-            str(video_path),
-            fps_filter=fps,
-            start_time_sec=start_time,
-            end_time_sec=end_time,
-        )
+    try:
+        # Open output files
+        with manager.output_writer, VideoReader(
+                str(video_path),
+                fps_filter=fps,
+                start_time_sec=start_time,
+                end_time_sec=end_time,
+        ) as video_reader:
+            try:
+                for frame_info in video_reader:
+                    timestamp = frame_info.timestamp_sec
+                    frame = frame_info.frame
 
-        try:
-            for frame_info in video_reader:
-                timestamp = frame_info.timestamp_sec
-                frame = frame_info.frame
+                    # Process frame with manager (handles all core logic)
+                    manager.process_frame(timestamp, frame)
 
-                # Process frame with manager (handles all core logic)
-                manager.process_frame(timestamp, frame)
+                    # UI/Display logic below (CLI-specific)
 
-                # UI/Display logic below (CLI-specific)
+                    # 1. Print events (new events since last frame)
+                    current_event_count = len(manager.event_collector.get_all_events())
+                    if current_event_count > last_event_count:
+                        new_events = manager.event_collector.get_all_events()[last_event_count:]
+                        for event in new_events:
+                            _print_event(event)
 
-                # 1. Print events (new events since last frame)
-                current_event_count = len(manager.event_collector.get_all_events())
-                if current_event_count > last_event_count:
-                    new_events = manager.event_collector.get_all_events()[last_event_count:]
-                    for event in new_events:
-                        _print_event(event)
+                        # Show previous frame if requested and available
+                        if show and show_prev_frame and previous_frame is not None:
+                            prev_display = _create_display_frame(
+                                previous_frame,
+                                timestamp - (1.0 / fps),  # Approximate previous timestamp
+                                manager.frame_count - 1,
+                                manager.current_phase,
+                                manager.round_manager,
+                                manager.timer_manager,
+                            )
+                            cv2.imshow("Previous Frame (Before Events)", prev_display)
 
-                    # Show previous frame if requested and available
-                    if show and show_prev_frame and previous_frame is not None:
-                        prev_display = _create_display_frame(
-                            previous_frame,
-                            timestamp - (1.0 / fps),  # Approximate previous timestamp
-                            manager.frame_count - 1,
+                        last_event_count = current_event_count
+
+                    # 2. Print frame data if requested
+                    if print_frame_data and manager.current_phase:
+                        _print_frame_data(
+                            timestamp,
+                            manager.frame_count,
                             manager.current_phase,
                             manager.round_manager,
                             manager.timer_manager,
                         )
-                        cv2.imshow("Previous Frame (Before Events)", prev_display)
 
-                    last_event_count = current_event_count
+                    # 3. Display frame if requested
+                    if show and manager.current_phase:
+                        display_frame = _create_display_frame(
+                            frame,
+                            timestamp,
+                            manager.frame_count,
+                            manager.current_phase,
+                            manager.round_manager,
+                            manager.timer_manager,
+                        )
+                        cv2.imshow("GameStateManager - VOD Processing", display_frame)
 
-                # 2. Print frame data if requested
-                if print_frame_data and manager.current_phase:
-                    _print_frame_data(
-                        timestamp,
-                        manager.frame_count,
-                        manager.current_phase,
-                        manager.round_manager,
-                        manager.timer_manager,
-                    )
+                        # Handle keyboard input
+                        if step:
+                            key = cv2.waitKey(0) & 0xFF
+                        else:
+                            key = cv2.waitKey(1) & 0xFF
 
-                # 3. Display frame if requested
-                if show and manager.current_phase:
-                    display_frame = _create_display_frame(
-                        frame,
-                        timestamp,
-                        manager.frame_count,
-                        manager.current_phase,
-                        manager.round_manager,
-                        manager.timer_manager,
-                    )
-                    cv2.imshow("GameStateManager - VOD Processing", display_frame)
+                        if key == ord('q'):
+                            typer.echo("\nProcessing stopped by user")
+                            break
 
-                    # Handle keyboard input
-                    if step:
-                        key = cv2.waitKey(0) & 0xFF
-                    else:
-                        key = cv2.waitKey(1) & 0xFF
+                    # 4. Progress feedback (every 100 frames)
+                    if not quiet and manager.frame_count % 100 == 0 and manager.current_phase:
+                        typer.echo(
+                            f"[{timestamp:7.2f}s] Frame {manager.frame_count:5d} | "
+                            f"Phase: {manager.current_phase.name:12s} | "
+                            f"Round {manager.round_manager.current_round:2d} | "
+                            f"Score: {manager.round_manager.current_score['team1']}-{manager.round_manager.current_score['team2']}"
+                        )
 
-                    if key == ord('q'):
-                        typer.echo("\nProcessing stopped by user")
-                        break
+                    # Store current frame as previous for next iteration
+                    if show_prev_frame:
+                        previous_frame = frame.copy()
+            except StopIteration:
+                # Match ended normally - this is expected when match completes
+                if not quiet:
+                    typer.echo("\nMatch ended, processing complete")
 
-                # 4. Progress feedback (every 100 frames)
-                if not quiet and manager.frame_count % 100 == 0 and manager.current_phase:
-                    typer.echo(
-                        f"[{timestamp:7.2f}s] Frame {manager.frame_count:5d} | "
-                        f"Phase: {manager.current_phase.name:12s} | "
-                        f"Round {manager.round_manager.current_round:2d} | "
-                        f"Score: {manager.round_manager.current_score['team1']}-{manager.round_manager.current_score['team2']}"
-                    )
+            # Finalize: check for missing round_end and match_end events
+            manager._finalize_events()
 
-                # Store current frame as previous for next iteration
-                if show_prev_frame:
-                    previous_frame = frame.copy()
-        except StopIteration:
-            # Match ended normally - this is expected when match completes
-            if not quiet:
-                typer.echo("\nMatch ended, processing complete")
-
-        # Finalize: check for missing round_end and match_end events
-        manager._finalize_events()
-
-    # Cleanup
-    if show:
-        cv2.destroyAllWindows()
+    finally:
+        if show:
+            cv2.destroyAllWindows()
 
     # Summary
     if not quiet:

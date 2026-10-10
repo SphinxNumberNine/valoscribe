@@ -4578,86 +4578,86 @@ def detect_agents_active_vod(
         typer.echo("")
 
         # Create video reader
-        video_reader = VideoReader(
+        with VideoReader(
             str(video_path),
             fps_filter=fps,
             start_time_sec=start_time,
             end_time_sec=end_time,
-        )
+        ) as video_reader:
 
-        frame_count = 0
-        agents_detected_frame = None
+            frame_count = 0
+            agents_detected_frame = None
 
-        # Process frames
-        for frame_info in video_reader:
-            frame_count += 1
-            timestamp = frame_info.timestamp_sec
-            frame = frame_info.frame
+            # Process frames
+            for frame_info in video_reader:
+                frame_count += 1
+                timestamp = frame_info.timestamp_sec
+                frame = frame_info.frame
 
-            # Detect agents for all 10 players
-            detected_agents = []
-            all_detected = True
+                # Detect agents for all 10 players
+                detected_agents = []
+                all_detected = True
 
-            for player_idx in range(10):
-                agent_name = detector.detect(frame, player_idx)
-                if agent_name:
-                    detected_agents.append((player_idx, agent_name))
-                else:
-                    all_detected = False
-                    detected_agents.append((player_idx, None))
-
-            # Show results
-            if show_all or all_detected:
-                typer.echo(f"[{timestamp:7.2f}s] Frame {frame_count}:")
-                
-                # Left side (0-4)
-                typer.echo("  LEFT side (0-4):")
-                for player_idx in range(5):
-                    agent_name = detected_agents[player_idx][1]
+                for player_idx in range(10):
+                    agent_name = detector.detect(frame, player_idx)
                     if agent_name:
-                        typer.secho(f"    Player {player_idx}: {agent_name}", fg=typer.colors.GREEN)
+                        detected_agents.append((player_idx, agent_name))
                     else:
-                        typer.secho(f"    Player {player_idx}: Not detected", fg=typer.colors.YELLOW)
-                
-                # Right side (5-9)
-                typer.echo("  RIGHT side (5-9):")
-                for player_idx in range(5, 10):
-                    agent_name = detected_agents[player_idx][1]
-                    if agent_name:
-                        typer.secho(f"    Player {player_idx}: {agent_name}", fg=typer.colors.GREEN)
-                    else:
-                        typer.secho(f"    Player {player_idx}: Not detected", fg=typer.colors.YELLOW)
-                
-                typer.echo("")
+                        all_detected = False
+                        detected_agents.append((player_idx, None))
 
-            # Track first successful detection of all 10
-            if all_detected and agents_detected_frame is None:
-                agents_detected_frame = frame_count
-                typer.secho(
-                    f"✓ All 10 agents detected at frame {frame_count} ({timestamp:.2f}s)!",
-                    fg=typer.colors.GREEN,
-                    bold=True,
-                )
-                typer.echo("")
+                # Show results
+                if show_all or all_detected:
+                    typer.echo(f"[{timestamp:7.2f}s] Frame {frame_count}:")
                 
-                # Print summary
-                typer.echo("Agent Summary:")
-                typer.echo("  LEFT side (0-4):")
-                for player_idx in range(5):
-                    typer.echo(f"    Player {player_idx}: {detected_agents[player_idx][1]}")
-                typer.echo("  RIGHT side (5-9):")
-                for player_idx in range(5, 10):
-                    typer.echo(f"    Player {player_idx}: {detected_agents[player_idx][1]}")
-                typer.echo("")
+                    # Left side (0-4)
+                    typer.echo("  LEFT side (0-4):")
+                    for player_idx in range(5):
+                        agent_name = detected_agents[player_idx][1]
+                        if agent_name:
+                            typer.secho(f"    Player {player_idx}: {agent_name}", fg=typer.colors.GREEN)
+                        else:
+                            typer.secho(f"    Player {player_idx}: Not detected", fg=typer.colors.YELLOW)
                 
-                # Exit unless show_all is enabled
-                if not show_all:
+                    # Right side (5-9)
+                    typer.echo("  RIGHT side (5-9):")
+                    for player_idx in range(5, 10):
+                        agent_name = detected_agents[player_idx][1]
+                        if agent_name:
+                            typer.secho(f"    Player {player_idx}: {agent_name}", fg=typer.colors.GREEN)
+                        else:
+                            typer.secho(f"    Player {player_idx}: Not detected", fg=typer.colors.YELLOW)
+                
+                    typer.echo("")
+
+                # Track first successful detection of all 10
+                if all_detected and agents_detected_frame is None:
+                    agents_detected_frame = frame_count
+                    typer.secho(
+                        f"✓ All 10 agents detected at frame {frame_count} ({timestamp:.2f}s)!",
+                        fg=typer.colors.GREEN,
+                        bold=True,
+                    )
+                    typer.echo("")
+                
+                    # Print summary
+                    typer.echo("Agent Summary:")
+                    typer.echo("  LEFT side (0-4):")
+                    for player_idx in range(5):
+                        typer.echo(f"    Player {player_idx}: {detected_agents[player_idx][1]}")
+                    typer.echo("  RIGHT side (5-9):")
+                    for player_idx in range(5, 10):
+                        typer.echo(f"    Player {player_idx}: {detected_agents[player_idx][1]}")
+                    typer.echo("")
+                
+                    # Exit unless show_all is enabled
+                    if not show_all:
+                        break
+
+                # Check max frames
+                if max_frames and frame_count >= max_frames:
+                    typer.echo(f"Reached max frames limit ({max_frames})")
                     break
-
-            # Check max frames
-            if max_frames and frame_count >= max_frames:
-                typer.echo(f"Reached max frames limit ({max_frames})")
-                break
 
         # Final summary
         typer.echo("=" * 60)
