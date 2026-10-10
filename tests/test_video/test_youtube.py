@@ -63,29 +63,19 @@ class TestDownloadYoutube:
 
     @patch("valoscribe.video.youtube.YoutubeDL")
     def test_reuse_existing_file(self, mock_ydl_class, mock_video_info, temp_output_dir):
-        """Test that existing file is reused when overwrite=False."""
-        # Setup: create existing file
+        """Only a recorded full download can be reused as a full source."""
         temp_output_dir.mkdir(parents=True)
-        existing_file = temp_output_dir / f"{mock_video_info['title']}-{mock_video_info['id']}.mp4"
-        existing_file.touch()
-
-        # Mock probe (extract_info with download=False)
-        mock_probe = MagicMock()
-        mock_probe.extract_info.return_value = mock_video_info
-        mock_ydl_class.return_value.__enter__.return_value = mock_probe
-
-        # Execute
-        result = download_youtube(
-            url="https://youtube.com/watch?v=abc123",
-            out_dir=temp_output_dir,
-            overwrite=False,
-        )
-
-        # Assert: file was reused, not downloaded
-        assert result.out_path == existing_file
-        # extract_info should only be called once (probe), not twice (probe + download)
-        assert mock_probe.extract_info.call_count == 1
-        assert mock_probe.extract_info.call_args[1]["download"] is False
+        existing_file = temp_output_dir / "abc123-h1080-f60-full.mp4"
+        existing_file.write_bytes(b"video")
+        downloader = MagicMock()
+        downloader.extract_info.return_value = mock_video_info
+        downloader.prepare_filename.return_value = str(existing_file)
+        mock_ydl_class.return_value.__enter__.return_value = downloader
+        first = download_youtube("https://youtube.com/watch?v=abc123", temp_output_dir)
+        downloader.extract_info.reset_mock()
+        second = download_youtube("https://youtube.com/watch?v=abc123", temp_output_dir)
+        assert second == first
+        downloader.extract_info.assert_called_once_with(first.url, download=False)
 
     @patch("valoscribe.video.youtube.YoutubeDL")
     def test_overwrite_existing_file(self, mock_ydl_class, mock_video_info, temp_output_dir):
