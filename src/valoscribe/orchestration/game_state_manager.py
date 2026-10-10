@@ -298,11 +298,10 @@ class GameStateManager:
         """Main processing loop - process entire video."""
         log.info(f"Starting video processing: {self.video_path.name}")
 
-        # Create video reader with fps filter
-        video_reader = VideoReader(str(self.video_path), fps_filter=self.fps)
-
-        # Context manager ensures files are closed
-        with self.output_writer:
+        # Own both resources across iteration and finalization.
+        with self.output_writer, VideoReader(
+            str(self.video_path), fps_filter=self.fps
+        ) as video_reader:
             try:
                 # Read frames at target FPS using iterator
                 for frame_info in video_reader:
