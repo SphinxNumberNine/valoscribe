@@ -27,8 +27,8 @@ class TestPlayerStateTracker:
         return {
             "health": HealthInfo(health=100, confidence=0.9, raw_text="100"),
             "armor": ArmorInfo(armor=50, confidence=0.9, raw_text="50"),
-            "ability_1": AbilityInfo(charges=2, total_blobs_detected=2),
-            "ability_2": AbilityInfo(charges=1, total_blobs_detected=1),
+            "ability_1": AbilityInfo(charges=1, total_blobs_detected=1),
+            "ability_2": AbilityInfo(charges=2, total_blobs_detected=2),
             "ability_3": AbilityInfo(charges=1, total_blobs_detected=1),
             "ultimate": UltimateInfo(charges=6, is_full=False, total_blobs_detected=6),
         }
@@ -65,8 +65,8 @@ class TestPlayerStateTracker:
         assert tracker.current_state["alive"] is True
         assert tracker.current_state["health"] == 100
         assert tracker.current_state["armor"] == 50
-        assert tracker.current_state["ability_1"] == 2
-        assert tracker.current_state["ability_2"] == 1
+        assert tracker.current_state["ability_1"] == 1
+        assert tracker.current_state["ability_2"] == 2
         assert tracker.current_state["ability_3"] == 1
         assert tracker.current_state["ultimate"]["charges"] == 6
         assert tracker.current_state["ultimate"]["is_full"] is False
@@ -165,20 +165,20 @@ class TestPlayerStateTracker:
         # Alive: abilities update
         detections = {
             "health": HealthInfo(health=100, confidence=0.9, raw_text="100"),
-            "ability_1": AbilityInfo(charges=2, total_blobs_detected=2),
+            "ability_2": AbilityInfo(charges=2, total_blobs_detected=2),
         }
         tracker.update(detections, timestamp=10.0)
-        assert tracker.current_state["ability_1"] == 2
+        assert tracker.current_state["ability_2"] == 2
 
         # Dead: abilities don't update
         tracker.current_state["alive"] = False
         detections = {
             "health": HealthInfo(health=0, confidence=0.9, raw_text="0"),
-            "ability_1": AbilityInfo(charges=1, total_blobs_detected=1),
+            "ability_2": AbilityInfo(charges=1, total_blobs_detected=1),
         }
         tracker.update(detections, timestamp=11.0)
-        # ability_1 should stay at 2 (not update to 1)
-        assert tracker.current_state["ability_1"] == 2
+        # Shock darts should stay at 2 (not update to 1).
+        assert tracker.current_state["ability_2"] == 2
 
     def test_ultimate_updates_regardless_of_alive(self, tracker):
         """Test that ultimate updates even when dead."""
