@@ -218,6 +218,7 @@ class EventCollector:
         """Reset the event collector, clearing all events and dedup cache."""
         self.events.clear()
         self.killfeed_dedup.reset()
+        self._last_write_index = 0
         log.debug("EventCollector reset")
 
     def get_event_summary(self) -> dict[str, int]:
