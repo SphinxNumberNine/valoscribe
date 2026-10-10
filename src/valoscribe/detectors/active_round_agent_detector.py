@@ -95,6 +95,7 @@ class ActiveRoundAgentDetector:
 
                 templates[agent_name] = {
                     "image": template,
+                    "greyscale_image": cv2.cvtColor(template, cv2.COLOR_BGR2GRAY),
                     "agent": agent_name,
                 }
                 log.debug(f"Loaded template for {agent_name}: {template.shape}")
@@ -221,12 +222,8 @@ class ActiveRoundAgentDetector:
 
         # Try matching each template
         for agent_name, template_data in self.templates.items():
-            template_img = template_data["image"]
-
-            # Convert template to greyscale if needed
-            if greyscale:
-                if len(template_img.shape) == 3:
-                    template_img = cv2.cvtColor(template_img, cv2.COLOR_BGR2GRAY)
+            # Only static templates are reused; each slot is still observed afresh.
+            template_img = template_data["greyscale_image" if greyscale else "image"]
 
             # Skip if template is larger than crop (can't match)
             if template_img.shape[0] > preprocessed.shape[0] or template_img.shape[1] > preprocessed.shape[1]:
