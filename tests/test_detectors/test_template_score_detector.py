@@ -179,7 +179,7 @@ class TestTemplateScoreDetector:
     def test_detect_out_of_range_team1(self, detector, mock_cropper):
         """Test detection rejects team1 score out of range."""
         detector._match_score_region = Mock(side_effect=[
-            (20, 0.95, "20"),  # team1 - out of range
+            (100, 0.95, "100"),  # team1 - out of range
             (5, 0.92, "5"),    # team2
         ])
 
@@ -192,7 +192,7 @@ class TestTemplateScoreDetector:
         """Test detection rejects team2 score out of range."""
         detector._match_score_region = Mock(side_effect=[
             (7, 0.95, "7"),    # team1
-            (14, 0.92, "14"),  # team2 - out of range
+            (100, 0.92, "100"),  # team2 - out of range
         ])
 
         frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
@@ -411,24 +411,26 @@ class TestScoreInfoValidation:
         assert info.team2_raw_text == "12"
 
     def test_score_range_validation(self):
-        """Test score must be in valid range (0-13)."""
+        """Test score must be in valid range including overtime (0-99)."""
         # Valid cases
         ScoreInfo(team1_score=0, team2_score=0, confidence=0.9)
         ScoreInfo(team1_score=13, team2_score=13, confidence=0.9)
+        ScoreInfo(team1_score=20, team2_score=18, confidence=0.9)
+        ScoreInfo(team1_score=99, team2_score=99, confidence=0.9)
 
         # Invalid cases - team1
         with pytest.raises(Exception):  # Pydantic ValidationError
             ScoreInfo(team1_score=-1, team2_score=5, confidence=0.9)
 
         with pytest.raises(Exception):
-            ScoreInfo(team1_score=14, team2_score=5, confidence=0.9)
+            ScoreInfo(team1_score=100, team2_score=5, confidence=0.9)
 
         # Invalid cases - team2
         with pytest.raises(Exception):
             ScoreInfo(team1_score=5, team2_score=-1, confidence=0.9)
 
         with pytest.raises(Exception):
-            ScoreInfo(team1_score=5, team2_score=14, confidence=0.9)
+            ScoreInfo(team1_score=5, team2_score=100, confidence=0.9)
 
     def test_confidence_range_validation(self):
         """Test confidence must be in valid range (0-1)."""

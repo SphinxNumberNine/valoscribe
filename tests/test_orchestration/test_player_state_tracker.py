@@ -138,7 +138,7 @@ class TestPlayerStateTracker:
         assert tracker.revival_candidate_count == 1
 
         # Detection fails (no health)
-        tracker.update({}, timestamp=11.0)
+        tracker.update({"health": None}, timestamp=11.0)
         assert tracker.revival_candidate_count == 0
         assert tracker.revival_first_detection_timestamp is None
 
@@ -296,8 +296,26 @@ class TestPlayerStateTracker:
         tracker.update(detections, timestamp=10.0)
 
         # Update with no detections
-        tracker.update({}, timestamp=11.0)
+        tracker.update({"health": None}, timestamp=11.0)
 
         # State should be preserved (except moved to previous)
         assert tracker.current_state["health"] == 100
         assert tracker.current_state["armor"] == 50
+
+
+def test_preround_update_without_health_preserves_revival_candidate():
+    tracker = PlayerStateTracker(0)
+    tracker.current_state["alive"] = False
+    tracker.update({"health": HealthInfo(health=100, confidence=0.9)}, 10.0)
+    tracker.update({}, 10.25)
+    assert tracker.revival_candidate_count == 1
+    assert tracker.revival_first_detection_timestamp == 10.0
+
+
+def test_missing_health_confirms_death_after_multiple_gameplay_observations():
+    tracker = PlayerStateTracker(0)
+    tracker.update({"health": HealthInfo(health=100, confidence=0.9)}, 10.0)
+    tracker.update({"health": None}, 10.25)
+    assert tracker.current_state["alive"] is True
+    tracker.update({"health": None}, 10.5)
+    assert tracker.current_state["alive"] is False

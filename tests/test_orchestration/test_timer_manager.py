@@ -92,7 +92,7 @@ class TestTimerManager:
         )
 
         assert timers["game_timer"] is None
-        assert timers["spike_timer"] == 60.0  # 105 - 45
+        assert timers["spike_timer"] is None  # Hidden after round end
         assert timers["post_round_timer"] == 5.0  # 105 - 100
 
     def test_spike_timer_increments(self, manager):
@@ -150,7 +150,7 @@ class TestTimerManager:
         manager.on_round_ended(100.0)
 
         timers1 = manager.get_timers(105.0, Phase.POST_ROUND, None)
-        assert timers1["spike_timer"] == 60.0
+        assert timers1["spike_timer"] is None
         assert timers1["post_round_timer"] == 5.0
 
         # Reset for round 2

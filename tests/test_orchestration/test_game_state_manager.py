@@ -76,7 +76,7 @@ class TestGameStateManager:
 
         assert manager.video_path == dummy_video_path
         assert manager.fps == 4.0
-        assert manager.current_phase == Phase.NON_GAME
+        assert manager.current_phase is None
         assert manager.frame_count == 0
 
     def test_components_initialized(self, dummy_video_path, vlr_metadata, temp_dir):
@@ -104,6 +104,11 @@ class TestGameStateManager:
             output_dir=temp_dir / "output",
         )
 
+        assert manager.player_trackers is None
+        manager._initialize_player_trackers_from_agents(
+            [player["agent"] for player in vlr_metadata["players"]],
+            ["defense"] * 5 + ["attack"] * 5,
+        )
         assert len(manager.player_trackers) == 10
 
         # Check first player
@@ -204,7 +209,7 @@ class TestGameStateManager:
 
         # Should add round_start event
         events = manager.event_collector.get_all_events()
-        assert len(events) == 1
+        assert [event["type"] for event in events] == ["round_start", "match_start"]
         assert events[0]["type"] == "round_start"
 
         # Timers should be reset

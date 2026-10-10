@@ -194,17 +194,19 @@ class TestRoundInfoValidation:
         assert info.raw_text == "ROUND 5/24"
 
     def test_round_number_range_validation(self):
-        """Test round number must be in valid range (1-24)."""
+        """Test round number must be in valid range including overtime (1-100)."""
         # Valid cases
         RoundInfo(round_number=1, confidence=0.9)
         RoundInfo(round_number=24, confidence=0.9)
+        RoundInfo(round_number=25, confidence=0.9)
+        RoundInfo(round_number=100, confidence=0.9)
 
         # Invalid cases
         with pytest.raises(Exception):  # Pydantic ValidationError
             RoundInfo(round_number=0, confidence=0.9)
 
         with pytest.raises(Exception):
-            RoundInfo(round_number=25, confidence=0.9)
+            RoundInfo(round_number=101, confidence=0.9)
 
         with pytest.raises(Exception):
             RoundInfo(round_number=-5, confidence=0.9)

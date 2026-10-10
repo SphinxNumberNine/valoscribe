@@ -110,7 +110,7 @@ class TestTemplateCreditsDetector:
         detector = TemplateCreditsDetector(mock_cropper)
 
         # Default template path should be set correctly
-        assert "templates/credits/credits_icon.png" in str(detector.template_path)
+        assert "templates/credits/credits_icon_dead.png" in detector.template_path.as_posix()
         # Template may or may not exist depending on setup
 
     def test_load_template_success(self, mock_cropper, mock_template, tmp_path):
@@ -153,7 +153,7 @@ class TestTemplateCreditsDetector:
     def test_detect_player_out_of_range(self, detector_with_template, mock_cropper):
         """Test detection with invalid player index."""
         mock_cropper.crop_player_info.return_value = [
-            {"side": "left", "credits": np.zeros((20, 40, 3), dtype=np.uint8)}
+            {"side": "left", "dead_credits": np.zeros((20, 40, 3), dtype=np.uint8)}
         ]
 
         frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
@@ -164,7 +164,7 @@ class TestTemplateCreditsDetector:
     def test_detect_wrong_side(self, detector_with_template, mock_cropper):
         """Test detection with wrong side specified."""
         mock_cropper.crop_player_info.return_value = [
-            {"side": "left", "credits": np.zeros((20, 40, 3), dtype=np.uint8)}
+            {"side": "left", "dead_credits": np.zeros((20, 40, 3), dtype=np.uint8)}
         ]
 
         frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
@@ -172,10 +172,10 @@ class TestTemplateCreditsDetector:
 
         assert result is None
 
-    def test_detect_missing_credits_region(self, detector_with_template, mock_cropper):
-        """Test detection when credits region is not in crop data."""
+    def test_detect_missing_dead_credits_region(self, detector_with_template, mock_cropper):
+        """Test detection when the dead credits region is missing from crop data."""
         mock_cropper.crop_player_info.return_value = [
-            {"side": "left"}  # No credits region
+            {"side": "left"}  # No dead credits region
         ]
 
         frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
@@ -186,7 +186,7 @@ class TestTemplateCreditsDetector:
     def test_detect_empty_crop(self, detector_with_template, mock_cropper):
         """Test detection with empty credits crop."""
         mock_cropper.crop_player_info.return_value = [
-            {"side": "left", "credits": np.array([])}
+            {"side": "left", "dead_credits": np.array([])}
         ]
 
         frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
@@ -194,13 +194,13 @@ class TestTemplateCreditsDetector:
 
         assert result is None
 
-    def test_detect_credits_visible_high_confidence(self, detector_with_template, mock_cropper, mock_template):
-        """Test detection when credits icon is clearly visible."""
+    def test_detect_dead_credits_visible_high_confidence(self, detector_with_template, mock_cropper, mock_template):
+        """Test detection when the icon in the dead credits location is visible."""
         # Create credits crop that will match after preprocessing
         credits_crop = self.create_matching_crop(mock_template)
 
         mock_cropper.crop_player_info.return_value = [
-            {"side": "left", "credits": credits_crop}
+            {"side": "left", "dead_credits": credits_crop}
         ]
 
         frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
@@ -212,13 +212,13 @@ class TestTemplateCreditsDetector:
         assert result.confidence >= 0.7
         assert result.confidence <= 1.0
 
-    def test_detect_credits_not_visible_low_confidence(self, detector_with_template, mock_cropper):
-        """Test detection when credits icon is not visible (player dead)."""
+    def test_detect_dead_credits_not_visible_low_confidence(self, detector_with_template, mock_cropper):
+        """An unmatched dead credits crop supplies no positive death signal."""
         # Create credits crop with no matching pattern
         credits_crop = np.random.randint(0, 50, (40, 60, 3), dtype=np.uint8)
 
         mock_cropper.crop_player_info.return_value = [
-            {"side": "left", "credits": credits_crop}
+            {"side": "left", "dead_credits": credits_crop}
         ]
 
         frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
@@ -234,8 +234,8 @@ class TestTemplateCreditsDetector:
         credits_crop = self.create_matching_crop(mock_template)
 
         mock_cropper.crop_player_info.return_value = [
-            {"side": "left", "credits": np.zeros((40, 60, 3), dtype=np.uint8)},
-            {"side": "right", "credits": credits_crop},
+            {"side": "left", "dead_credits": np.zeros((40, 60, 3), dtype=np.uint8)},
+            {"side": "right", "dead_credits": credits_crop},
         ]
 
         frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
@@ -299,7 +299,7 @@ class TestTemplateCreditsDetector:
         credits_crop = self.create_matching_crop(mock_template)
 
         mock_cropper.crop_player_info.return_value = [
-            {"side": "left", "credits": credits_crop}
+            {"side": "left", "dead_credits": credits_crop}
         ]
 
         frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
@@ -321,7 +321,7 @@ class TestTemplateCreditsDetector:
         credits_crop = np.random.randint(0, 50, (40, 60, 3), dtype=np.uint8)
 
         mock_cropper.crop_player_info.return_value = [
-            {"side": "left", "credits": credits_crop}
+            {"side": "left", "dead_credits": credits_crop}
         ]
 
         frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
@@ -337,7 +337,7 @@ class TestTemplateCreditsDetector:
     def test_detect_with_debug_empty_crop(self, detector_with_template, mock_cropper):
         """Test debug detection with empty crop."""
         mock_cropper.crop_player_info.return_value = [
-            {"side": "left", "credits": np.array([])}
+            {"side": "left", "dead_credits": np.array([])}
         ]
 
         frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
@@ -352,7 +352,7 @@ class TestTemplateCreditsDetector:
     def test_detect_with_debug_player_out_of_range(self, detector_with_template, mock_cropper):
         """Test debug detection with invalid player index."""
         mock_cropper.crop_player_info.return_value = [
-            {"side": "left", "credits": np.zeros((20, 40, 3), dtype=np.uint8)}
+            {"side": "left", "dead_credits": np.zeros((20, 40, 3), dtype=np.uint8)}
         ]
 
         frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
@@ -377,7 +377,7 @@ class TestTemplateCreditsDetector:
 
         # Low threshold detector
         detector_low = TemplateCreditsDetector(mock_cropper, template_path=template_path, min_confidence=0.3)
-        mock_cropper.crop_player_info.return_value = [{"side": "left", "credits": credits_crop}]
+        mock_cropper.crop_player_info.return_value = [{"side": "left", "dead_credits": credits_crop}]
 
         frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
         result_low = detector_low.detect(frame, player_index=0)
@@ -405,7 +405,7 @@ class TestTemplateCreditsDetector:
         detector1 = TemplateCreditsDetector(
             mock_cropper, template_path=template_path, match_method=cv2.TM_CCOEFF_NORMED
         )
-        mock_cropper.crop_player_info.return_value = [{"side": "left", "credits": credits_crop}]
+        mock_cropper.crop_player_info.return_value = [{"side": "left", "dead_credits": credits_crop}]
 
         frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
         result1 = detector1.detect(frame, player_index=0)
@@ -449,7 +449,7 @@ class TestTemplateCreditsDetector:
         # After preprocessing, this should give negative correlation
 
         mock_cropper.crop_player_info.return_value = [
-            {"side": "left", "credits": credits_crop}
+            {"side": "left", "dead_credits": credits_crop}
         ]
 
         frame = np.zeros((1080, 1920, 3), dtype=np.uint8)

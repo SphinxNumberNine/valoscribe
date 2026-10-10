@@ -106,7 +106,7 @@ class TestPreroundCreditsDetector:
         detector = PreroundCreditsDetector(mock_cropper)
 
         # Default template path should be set correctly
-        assert "templates/credits/credits_icon_preround.png" in str(detector.template_path)
+        assert "templates/credits/credits_icon_preround.png" in detector.template_path.as_posix()
 
     def test_load_template_success(self, mock_cropper, mock_template, tmp_path):
         """Test successful template loading."""
