@@ -53,7 +53,11 @@ class AbilityInfo(BaseModel):
 class CreditsInfo(BaseModel):
     """Information about credits icon detection."""
 
-    credits_visible: bool = Field(..., description="Whether credits icon is visible (player alive)")
+    credits_visible: bool = Field(
+        ...,
+        description="Whether the detector matched its credits icon in the selected HUD region; "
+        "the active-round detector checks dead_credits, the preround detector checks credits",
+    )
     confidence: float = Field(..., ge=0.0, le=1.0, description="Detection confidence (0-1)")
 
 

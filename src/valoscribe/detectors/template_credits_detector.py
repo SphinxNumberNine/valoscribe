@@ -209,10 +209,10 @@ class TemplateCreditsDetector:
 
         player_crop_data = player_crops[player_index]
 
-        if "credits" not in player_crop_data:
+        if "dead_credits" not in player_crop_data:
             return None, np.array([]), {}
 
-        credits_crop = player_crop_data["credits"]
+        credits_crop = player_crop_data["dead_credits"]
 
         if credits_crop.size == 0:
             return None, np.array([]), {}
