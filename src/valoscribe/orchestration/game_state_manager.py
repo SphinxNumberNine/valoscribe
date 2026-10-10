@@ -314,6 +314,11 @@ class GameStateManager:
 
     def process_frame(self, timestamp: float, frame: np.ndarray) -> None:
         """Process a single frame."""
+        with self.detector_registry.cropper.frame_scope(frame):
+            self._process_frame(timestamp, frame)
+
+    def _process_frame(self, timestamp: float, frame: np.ndarray) -> None:
+        """Process a frame while its detector crops are shared."""
         self.frame_count += 1
 
         # Check if match has ended - process 5 more frames then stop
