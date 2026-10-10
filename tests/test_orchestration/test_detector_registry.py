@@ -71,7 +71,7 @@ class TestDetectorRegistry:
             "timer", "score", "spike", "health", "armor",
             "round",
             "preround_credits", "preround_agent", "preround_ability", "preround_ultimate",
-            "inround_ability", "inround_ultimate",
+            "inround_agent", "inround_ability", "inround_ultimate",
             "killfeed",
         ]
 
@@ -120,7 +120,7 @@ class TestDetectorRegistry:
         detectors_with_cropper = [
             "timer", "score", "spike", "health", "armor",
             "preround_credits", "preround_agent", "preround_ability", "preround_ultimate",
-            "inround_ability", "inround_ultimate", "killfeed",
+            "inround_agent", "inround_ability", "inround_ultimate", "killfeed",
         ]
 
         for name in detectors_with_cropper:

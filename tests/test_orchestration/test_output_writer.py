@@ -26,7 +26,9 @@ class TestOutputWriter:
     @pytest.fixture
     def writer(self, temp_dir):
         """Create OutputWriter instance."""
-        return OutputWriter(output_dir=temp_dir)
+        writer = OutputWriter(output_dir=temp_dir)
+        yield writer
+        writer.close()
 
     @pytest.fixture
     def sample_player_states(self):

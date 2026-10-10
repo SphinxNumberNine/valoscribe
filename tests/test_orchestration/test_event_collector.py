@@ -97,7 +97,7 @@ class TestEventCollector:
             confidence=0.95,
         )
 
-        added = collector.add_killfeed_events(timestamp=5.0, killfeed_detections=[detection])
+        added = collector.add_killfeed_events(timestamp=5.0, killfeed_detections=[(detection, {})])
 
         assert added == 1
         assert len(collector.events) == 1
@@ -124,7 +124,7 @@ class TestEventCollector:
             ),
         ]
 
-        added = collector.add_killfeed_events(timestamp=5.0, killfeed_detections=detections)
+        added = collector.add_killfeed_events(timestamp=5.0, killfeed_detections=[(detection, {}) for detection in detections])
 
         assert added == 2
         assert len(collector.events) == 2
@@ -140,9 +140,9 @@ class TestEventCollector:
         )
 
         # Add same kill multiple times (simulating consecutive frames)
-        added1 = collector.add_killfeed_events(timestamp=5.0, killfeed_detections=[detection])
-        added2 = collector.add_killfeed_events(timestamp=5.25, killfeed_detections=[detection])
-        added3 = collector.add_killfeed_events(timestamp=5.5, killfeed_detections=[detection])
+        added1 = collector.add_killfeed_events(timestamp=5.0, killfeed_detections=[(detection, {})])
+        added2 = collector.add_killfeed_events(timestamp=5.25, killfeed_detections=[(detection, {})])
+        added3 = collector.add_killfeed_events(timestamp=5.5, killfeed_detections=[(detection, {})])
 
         assert added1 == 1  # First is new
         assert added2 == 0  # Duplicate
@@ -160,10 +160,10 @@ class TestEventCollector:
         )
 
         # Add kill at t=0
-        added1 = collector.add_killfeed_events(timestamp=0.0, killfeed_detections=[detection])
+        added1 = collector.add_killfeed_events(timestamp=0.0, killfeed_detections=[(detection, {})])
 
         # Same kill at t=6 (beyond 5s window) - should be new
-        added2 = collector.add_killfeed_events(timestamp=6.0, killfeed_detections=[detection])
+        added2 = collector.add_killfeed_events(timestamp=6.0, killfeed_detections=[(detection, {})])
 
         assert added1 == 1
         assert added2 == 1
@@ -256,7 +256,7 @@ class TestEventCollector:
             victim_side="defense",
             confidence=0.95,
         )
-        collector.add_killfeed_events(timestamp=10.0, killfeed_detections=[detection])
+        collector.add_killfeed_events(timestamp=10.0, killfeed_detections=[(detection, {})])
 
         assert len(collector.events) == 3
         assert collector.killfeed_dedup.get_recent_kill_count() == 1
@@ -322,7 +322,7 @@ class TestEventCollector:
         for i in range(5):
             collector.add_killfeed_events(
                 timestamp=10.0 + i * 0.25,
-                killfeed_detections=[kill1],
+                killfeed_detections=[(kill1, {})],
             )
 
         # Round end
