@@ -6,9 +6,10 @@ from 1080p Valorant esports broadcast frames based on JSON coordinate configurat
 """
 
 from __future__ import annotations
+from contextlib import contextmanager
 import json
 from pathlib import Path
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Iterator
 
 import cv2
 import numpy as np
@@ -30,7 +31,38 @@ class Cropper:
         """
         self.config = self._load_config(config_path)
         self.regions = self.config["regions"]
+        self._scoped_frame = None
+        self._player_crop_cache = {}
         log.info(f"Loaded HUD config: {self.config['name']}")
+
+    @contextmanager
+    def frame_scope(self, frame: np.ndarray) -> Iterator[Cropper]:
+        """Reuse player crops during one immutable frame's processing.
+
+        Detectors must treat returned crops as read-only. Caches are released
+        on scope exit, including early returns and exceptions. Calls outside
+        a scope retain the original behavior and return freshly copied crops.
+        """
+        previous_frame = self._scoped_frame
+        previous_cache = self._player_crop_cache
+        if frame is not previous_frame:
+            self._scoped_frame = frame
+            self._player_crop_cache = {}
+        try:
+            yield self
+        finally:
+            self._scoped_frame = previous_frame
+            self._player_crop_cache = previous_cache
+
+    def _get_player_crops(
+        self, frame: np.ndarray, preround: bool
+    ) -> List[Dict[str, np.ndarray]]:
+        crop = self._crop_player_info_preround if preround else self._crop_player_info
+        if frame is not self._scoped_frame:
+            return crop(frame)
+        if preround not in self._player_crop_cache:
+            self._player_crop_cache[preround] = crop(frame)
+        return self._player_crop_cache[preround]
 
     def _load_config(self, config_path: str | Path) -> Dict[str, Any]:
         """Load configuration from JSON file."""
@@ -117,6 +149,10 @@ class Cropper:
         return entries
 
     def crop_player_info(self, frame: np.ndarray) -> List[Dict[str, np.ndarray]]:
+        """Crop all ten players, reusing results inside a frame scope."""
+        return self._get_player_crops(frame, preround=False)
+
+    def _crop_player_info(self, frame: np.ndarray) -> List[Dict[str, np.ndarray]]:
         """
         Crop player info for all 10 players (5 per side).
 
@@ -239,6 +275,10 @@ class Cropper:
         return players
 
     def crop_player_info_preround(self, frame: np.ndarray) -> List[Dict[str, np.ndarray]]:
+        """Crop all ten preround players, reusing results inside a frame scope."""
+        return self._get_player_crops(frame, preround=True)
+
+    def _crop_player_info_preround(self, frame: np.ndarray) -> List[Dict[str, np.ndarray]]:
         """
         Crop pre-round player info for all 10 players (5 per side).
 
