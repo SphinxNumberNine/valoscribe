@@ -172,10 +172,10 @@ class TestTemplateCreditsDetector:
 
         assert result is None
 
-    def test_detect_missing_credits_region(self, detector_with_template, mock_cropper):
-        """Test detection when credits region is not in crop data."""
+    def test_detect_missing_dead_credits_region(self, detector_with_template, mock_cropper):
+        """Test detection when the dead credits region is missing from crop data."""
         mock_cropper.crop_player_info.return_value = [
-            {"side": "left"}  # No credits region
+            {"side": "left"}  # No dead credits region
         ]
 
         frame = np.zeros((1080, 1920, 3), dtype=np.uint8)
@@ -194,8 +194,8 @@ class TestTemplateCreditsDetector:
 
         assert result is None
 
-    def test_detect_credits_visible_high_confidence(self, detector_with_template, mock_cropper, mock_template):
-        """Test detection when credits icon is clearly visible."""
+    def test_detect_dead_credits_visible_high_confidence(self, detector_with_template, mock_cropper, mock_template):
+        """Test detection when the icon in the dead credits location is visible."""
         # Create credits crop that will match after preprocessing
         credits_crop = self.create_matching_crop(mock_template)
 
@@ -212,8 +212,8 @@ class TestTemplateCreditsDetector:
         assert result.confidence >= 0.7
         assert result.confidence <= 1.0
 
-    def test_detect_credits_not_visible_low_confidence(self, detector_with_template, mock_cropper):
-        """Test detection when credits icon is not visible (player dead)."""
+    def test_detect_dead_credits_not_visible_low_confidence(self, detector_with_template, mock_cropper):
+        """An unmatched dead credits crop supplies no positive death signal."""
         # Create credits crop with no matching pattern
         credits_crop = np.random.randint(0, 50, (40, 60, 3), dtype=np.uint8)
 
