@@ -349,20 +349,33 @@ class GameStateManager:
 
         # 2. Route detection based on phase
         if phase == Phase.PREROUND:
-            self._process_preround(timestamp, frame)
+            self._process_preround(timestamp, frame, phase_detections)
         elif phase == Phase.ACTIVE_ROUND:
             self._process_active_round(timestamp, frame, phase_detections)
         elif phase == Phase.POST_ROUND:
             self._process_post_round(timestamp, frame, phase_detections)
 
         # 3. Write frame state
-        self._write_frame_state(timestamp, frame)
+        self._write_frame_state(timestamp, frame, phase_detections)
 
         # 4. Progress feedback (every 100 frames)
         if self.frame_count % 100 == 0:
             self._print_progress(timestamp)
 
-    def _add_timers_to_event(self, event: dict, timestamp: float, frame: np.ndarray = None) -> dict:
+    def _get_game_timer(self, frame: np.ndarray = None, phase_detections: dict = None):
+        """Reuse this frame's phase observation, including an unsuccessful detection."""
+        if phase_detections is not None and "timer" in phase_detections:
+            timer_info = phase_detections["timer"]
+        elif frame is not None:
+            timer_info = self.detector_registry.timer_detector.detect(frame)
+        else:
+            timer_info = None
+        return timer_info.time_seconds if timer_info else None
+
+    def _add_timers_to_event(
+        self, event: dict, timestamp: float, frame: np.ndarray = None,
+        phase_detections: dict = None,
+    ) -> dict:
         """
         Add all timer values to an event.
 
@@ -370,15 +383,12 @@ class GameStateManager:
             event: Event dictionary to enrich
             timestamp: Current video timestamp
             frame: Optional frame for detecting game timer (if None, game_timer will be None)
+            phase_detections: This frame's phase observations, used before any fallback detection
 
         Returns:
             Event dictionary with timers added
         """
-        # Get game timer from frame if provided
-        game_timer = None
-        if frame is not None:
-            timer_info = self.detector_registry.timer_detector.detect(frame)
-            game_timer = timer_info.time_seconds if timer_info else None
+        game_timer = self._get_game_timer(frame, phase_detections)
 
         # Get all timers from timer manager
         timers = self.timer_manager.get_timers(timestamp, self.current_phase, game_timer)
@@ -565,7 +575,9 @@ class GameStateManager:
                 self.match_started = True
                 log.info(f"Match started: {team1_name} vs {team2_name} @ {timestamp:.2f}s")
 
-    def _process_preround(self, timestamp: float, frame: np.ndarray) -> None:
+    def _process_preround(
+        self, timestamp: float, frame: np.ndarray, phase_detections: dict = None
+    ) -> None:
         """Process PREROUND phase - detect agents, abilities, ultimates."""
         # Only detect agents if player trackers not yet initialized
         if self.player_trackers is None:
@@ -740,7 +752,7 @@ class GameStateManager:
                         "winner": winner_name,
                         "score_team1": new_score["team1"],
                         "score_team2": new_score["team2"],
-                    }, timestamp, frame)
+                    }, timestamp, frame, phase_detections)
                     self.event_collector.add_event(event)
 
                     # Update current score in round manager
@@ -770,7 +782,7 @@ class GameStateManager:
             event = self._add_timers_to_event({
                 "type": "spike_plant",
                 "timestamp": timestamp,
-            }, timestamp, frame)
+            }, timestamp, frame, phase_detections)
             self.event_collector.add_event(event)
             log.info(f"Spike planted @ {timestamp:.2f}s")
 
@@ -863,7 +875,7 @@ class GameStateManager:
                     "team": player_tracker.metadata.get("team"),
                     "agent": player_tracker.metadata.get("agent"),
                     "player_index": player_tracker.player_index,
-                }, timestamp, frame)
+                }, timestamp, frame, phase_detections)
                 self.event_collector.add_event(event)
 
             # Validate state changes for ability/ultimate events
@@ -879,7 +891,7 @@ class GameStateManager:
             )
 
             for event in validation_events:
-                event_with_timers = self._add_timers_to_event(event, timestamp, frame)
+                event_with_timers = self._add_timers_to_event(event, timestamp, frame, phase_detections)
                 self.event_collector.add_event(event_with_timers)
 
         # Detect killfeed - returns ALL candidate combinations tagged with entry index
@@ -955,8 +967,7 @@ class GameStateManager:
         enriched_kills = []
 
         # Get timers for this frame (calculate once for all kills)
-        timer_info = self.detector_registry.timer_detector.detect(frame)
-        game_timer = timer_info.time_seconds if timer_info else None
+        game_timer = self._get_game_timer(frame, phase_detections)
         timers = self.timer_manager.get_timers(timestamp, self.current_phase, game_timer)
 
         for kill_detection in valid_kills:
@@ -1141,7 +1152,7 @@ class GameStateManager:
                     "team": player_tracker.metadata.get("team"),
                     "agent": player_tracker.metadata.get("agent"),
                     "player_index": player_tracker.player_index,
-                }, timestamp, frame)
+                }, timestamp, frame, phase_detections)
                 self.event_collector.add_event(event)
 
             # Validate state changes for ability/ultimate events
@@ -1157,7 +1168,7 @@ class GameStateManager:
             )
 
             for event in validation_events:
-                event_with_timers = self._add_timers_to_event(event, timestamp, frame)
+                event_with_timers = self._add_timers_to_event(event, timestamp, frame, phase_detections)
                 self.event_collector.add_event(event_with_timers)
 
         # Detect killfeed - returns ALL candidate combinations tagged with entry index
@@ -1233,8 +1244,7 @@ class GameStateManager:
         enriched_kills = []
 
         # Get timers for this frame (calculate once for all kills)
-        timer_info = self.detector_registry.timer_detector.detect(frame)
-        game_timer = timer_info.time_seconds if timer_info else None
+        game_timer = self._get_game_timer(frame, phase_detections)
         timers = self.timer_manager.get_timers(timestamp, self.current_phase, game_timer)
 
         for kill_detection in valid_kills:
@@ -1304,7 +1314,7 @@ class GameStateManager:
                 "winner": winner_name,
                 "score_team1": round_end_data["score"]["team1"],
                 "score_team2": round_end_data["score"]["team2"],
-            }, timestamp, frame)
+            }, timestamp, frame, phase_detections)
             self.event_collector.add_event(event)
 
             # Check if match has ended (one team won)
@@ -1329,7 +1339,7 @@ class GameStateManager:
                     "final_score_team2": score_team2,
                     "team1": self.round_manager.team_names[0],
                     "team2": self.round_manager.team_names[1],
-                }, timestamp, frame)
+                }, timestamp, frame, phase_detections)
                 self.event_collector.add_event(match_end_event)
                 self.match_ended = True
                 log.info(
@@ -1632,11 +1642,12 @@ class GameStateManager:
 
         return alive_list
 
-    def _write_frame_state(self, timestamp: float, frame: np.ndarray) -> None:
+    def _write_frame_state(
+        self, timestamp: float, frame: np.ndarray, phase_detections: dict = None
+    ) -> None:
         """Write current frame state to CSV."""
         # Detect visible game timer
-        timer_info = self.detector_registry.timer_detector.detect(frame)
-        game_timer = timer_info.time_seconds if timer_info else None
+        game_timer = self._get_game_timer(frame, phase_detections)
 
         # Get all timer values
         timers = self.timer_manager.get_timers(timestamp, self.current_phase, game_timer)
