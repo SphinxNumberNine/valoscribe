@@ -321,19 +321,22 @@ class VideoReader:
             FrameInfo if found, None otherwise
         """
         old_position = self._source.get_position()
+        old_current_frame = self._current_frame
         try:
             if self.seek(timestamp_sec):
+                frame_number = self._source.get_position()
                 success, frame = self._source.read_frame()
                 if success and frame is not None:
-                    timestamp_ms = timestamp_sec * 1000.0
+                    actual_timestamp = frame_number / self.fps if self.fps > 0 else 0.0
                     return FrameInfo(
-                        frame_number=self._source.get_position(),
-                        timestamp_ms=timestamp_ms,
-                        timestamp_sec=timestamp_sec,
+                        frame_number=frame_number,
+                        timestamp_ms=actual_timestamp * 1000.0,
+                        timestamp_sec=actual_timestamp,
                         frame=frame.copy(),
                     )
         finally:
             self._source.set_position(old_position)
+            self._current_frame = old_current_frame
         return None
 
     def close(self) -> None:
