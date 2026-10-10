@@ -1,6 +1,12 @@
 from __future__ import annotations
+
+import hashlib
+import json
+import math
+import subprocess
+import urllib.parse
 from pathlib import Path
-from typing import Optional, Callable, Dict, Any
+from typing import Any, Callable, Dict, Optional
 
 from tqdm import tqdm
 from yt_dlp import YoutubeDL
@@ -28,7 +34,7 @@ def _parse_timestamp(timestamp_str: str) -> Optional[float]:
     timestamp_str = timestamp_str.strip()
 
     # Try simple integer or "1234s" format
-    if timestamp_str.endswith('s'):
+    if timestamp_str.endswith("s"):
         try:
             return float(timestamp_str[:-1])
         except ValueError:
@@ -40,8 +46,8 @@ def _parse_timestamp(timestamp_str: str) -> Optional[float]:
             pass
 
     # Try HH:MM:SS or MM:SS format
-    if ':' in timestamp_str:
-        parts = timestamp_str.split(':')
+    if ":" in timestamp_str:
+        parts = timestamp_str.split(":")
         try:
             if len(parts) == 2:  # MM:SS
                 return float(parts[0]) * 60 + float(parts[1])
@@ -51,7 +57,7 @@ def _parse_timestamp(timestamp_str: str) -> Optional[float]:
             pass
 
     # Try YouTube format: "1h20m34s"
-    pattern = r'(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?'
+    pattern = r"(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?"
     match = re.match(pattern, timestamp_str)
     if match:
         hours = int(match.group(1) or 0)
@@ -100,6 +106,71 @@ class _TqdmProgressHook:
             log.info("Download complete, merging streams...")
 
 
+def _cache_manifest(path: Path) -> Path:
+    return path.with_suffix(path.suffix + ".valoscribe.json")
+
+
+def _read_cached_result(path: Path, request: dict, url: str) -> Optional[DownloadResult]:
+    """Only reuse files whose provenance and request were recorded by this downloader."""
+    try:
+        manifest = json.loads(_cache_manifest(path).read_text(encoding="utf-8"))
+        if manifest["version"] != 1 or manifest["request"] != request:
+            return None
+        result = DownloadResult.model_validate(manifest["result"])
+        if not result.out_path.is_file() or result.out_path.stat().st_size == 0:
+            return None
+        return result.model_copy(update={"url": url})
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
+def _write_cached_result(path: Path, request: dict, result: DownloadResult) -> None:
+    manifest = _cache_manifest(path)
+    temporary = manifest.with_suffix(manifest.suffix + ".tmp")
+    temporary.write_text(
+        json.dumps(
+            {
+                "version": 1,
+                "request": request,
+                "result": result.model_dump(mode="json"),
+            }
+        ),
+        encoding="utf-8",
+    )
+    temporary.replace(manifest)
+
+
+def _probe_clip(path: Path) -> dict:
+    """Read the produced media rather than reporting the source VOD's duration."""
+    from fractions import Fraction
+
+    probe = subprocess.run(
+        [
+            "ffprobe",
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=height,avg_frame_rate:format=duration",
+            "-of",
+            "json",
+            str(path),
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    metadata = json.loads(probe.stdout)
+    stream = metadata["streams"][0]
+    duration = float(metadata["format"]["duration"])
+    if not math.isfinite(duration) or duration <= 0:
+        raise ValueError("Trimmed video has no valid duration")
+    rate = stream.get("avg_frame_rate", "0/1")
+    fps = float(Fraction(rate)) if rate != "0/0" else None
+    return {"duration": duration, "height": stream.get("height"), "fps": fps}
+
+
 def download_youtube(
     url: str,
     out_dir: str | Path,
@@ -108,187 +179,160 @@ def download_youtube(
     prefer_fps: int = 60,
     prefer_ext: str = "mp4",
     overwrite: bool = False,
-    rate_limit: Optional[str] = None,  # e.g., "5M" to limit to ~5 MB/s
+    rate_limit: Optional[str] = None,
     on_progress: Optional[Callable[[Dict[str, Any]], None]] = None,
-    start_time: Optional[float] = None,  # Start time in seconds for livestream clips
-    duration: Optional[float] = None,  # Duration in seconds (default: 45 min)
+    start_time: Optional[float] = None,
+    duration: Optional[float] = None,
 ) -> DownloadResult:
-    """
-    Download a YouTube VOD to a single merged file suitable for OpenCV.
-    Returns metadata including the final output path.
+    """Download a full VOD or a separately cached, stream-copied segment.
 
-    - Chooses best video ≤ prefer_height and ≤ prefer_fps, prefers MP4 container.
-    - Merges audio+video into a single file via ffmpeg.
-    - If the exact file exists and overwrite=False, reuses it.
-
-    Timestamped section download (for livestream clips):
-    - start_time: Start time in seconds (extracts from URL 't=' param if not provided)
-    - duration: Duration to download in seconds (default: 5400s = 90 min)
-    - Downloads full video, then trims with ffmpeg (fast stream copy, no re-encode)
-    - If duration extends beyond video end, trims to end without error
+    A timestamped URL defaults to a 90-minute segment. Duration alone clips from
+    zero. Full sources remain intact and can serve multiple segment requests.
+    Cache identity includes video ID, format preferences, start and duration;
+    legacy files without provenance are not reused because they may be trimmed.
+    Segment metadata records the requested source offset and measured duration.
+    Stream copy retains ffmpeg's keyframe-dependent seek precision.
     """
+    if start_time is None:
+        parsed = urllib.parse.urlparse(url)
+        query = urllib.parse.parse_qs(parsed.query)
+        fragment = urllib.parse.parse_qs(parsed.fragment)
+        value = query.get("t", fragment.get("t", [None]))[0]
+        if value is not None:
+            start_time = _parse_timestamp(value)
+            if start_time is None:
+                raise ValueError(f"Invalid URL timestamp: {value}")
+    if duration is not None and start_time is None:
+        start_time = 0.0
+    if start_time is not None:
+        start_time = float(start_time)
+        duration = float(duration) if duration is not None else 5400.0
+        if not math.isfinite(start_time) or start_time < 0:
+            raise ValueError("start_time must be finite and nonnegative")
+        if not math.isfinite(duration) or duration <= 0:
+            raise ValueError("duration must be finite and positive")
+
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-
-    # Parse timestamp from URL if not provided (handles t= param in YouTube URLs)
-    if start_time is None:
-        import urllib.parse
-        parsed = urllib.parse.urlparse(url)
-        query_params = urllib.parse.parse_qs(parsed.query)
-        fragment_params = urllib.parse.parse_qs(parsed.fragment)
-
-        # Check for 't' parameter in query string or fragment
-        t_param = query_params.get('t', fragment_params.get('t', [None]))[0]
-        if t_param:
-            # Handle formats: "1234s", "1234", "20m34s", "1h20m34s"
-            start_time = _parse_timestamp(t_param)
-            if start_time:
-                log.info(f"Extracted start time from URL: {start_time}s")
-
-    # Set default duration if downloading timestamped section
-    if start_time is not None and duration is None:
-        duration = 5400  # 90 minutes default (handles overtime, downloads to end if shorter)
-        log.info(f"Using default duration: {duration}s (90 min)")
-
-    # Filename template; keeping ID avoids title collisions.
-    outtmpl = str(out_dir / "%(title).200B-%(id)s.%(ext)s")
-
-    # Format selection logic:
-    # Try best video (height/fps/ext filters) + best audio (m4a) -> MP4; fall back to best single.
+    # ID-only names remain stable when titles change and use yt-dlp sanitization.
+    outtmpl = str(out_dir / f"%(id)s-h{prefer_height}-f{prefer_fps}-full.%(ext)s")
     fmt = (
         f"bestvideo[height<={prefer_height}][fps<={prefer_fps}][ext={prefer_ext}]"
         "+bestaudio[ext=m4a]/"
-        f"best[height<={prefer_height}][fps<={prefer_fps}][ext={prefer_ext}]/"
-        "best"
+        f"best[height<={prefer_height}][fps<={prefer_fps}][ext={prefer_ext}]/best"
     )
-
     hooks = [_TqdmProgressHook()]
     if on_progress:
         hooks.append(on_progress)
-
-    ydl_opts = {
+    options = {
         "format": fmt,
         "outtmpl": outtmpl,
         "noplaylist": True,
-        "merge_output_format": prefer_ext,   # ensure we end with .mp4 for OpenCV
+        "merge_output_format": prefer_ext,
         "ignoreerrors": False,
         "quiet": True,
         "no_warnings": True,
         "progress_hooks": hooks,
-        # network/runtime
-        "ratelimit": rate_limit,             # None or like "5M"
-        # retries (network/transient)
+        "ratelimit": rate_limit,
         "retries": 5,
         "fragment_retries": 5,
         "concurrent_fragment_downloads": 5,
-        # ytdlp caches format data; safe to keep defaults
+        # An unverified existing file must not be silently accepted by yt-dlp.
+        "overwrites": True,
     }
-
-    # Add download sections for timestamped clips
-    # Note: We'll trim after download using ffmpeg subprocess
-    # (yt-dlp's download_ranges doesn't work reliably with all stream types)
-    trim_after_download = False
-    trim_start = None
-    trim_duration = None
-
-    if start_time is not None:
-        end_time = start_time + duration
-        log.info(f"Will download and trim section: {start_time}s to {end_time}s ({duration}s duration)")
-        trim_after_download = True
-        trim_start = start_time
-        trim_duration = duration
-
-    # If overwrite=False and potential output already exists, short-circuit.
-    # We can't know exact final path before download, so we probe info first.
-    with YoutubeDL({"quiet": True, "no_warnings": True}) as probe:
+    with YoutubeDL(options) as probe:
         info = probe.extract_info(url, download=False)
-    title = info.get("title")
-    vid = info.get("id")
-    # Guess final path: prefer_ext container after merge
-    guessed = out_dir / f"{title}-{vid}.{prefer_ext}"
-    if not overwrite and guessed.exists():
-        log.info("reusing existing file: %s", guessed)
-        return DownloadResult(
-            url=url,
-            out_path=guessed,
-            title=title,
-            id=vid,
-            height=info.get("height"),
-            fps=info.get("fps"),
-            duration=info.get("duration"),
-        )
+        source_path = Path(probe.prepare_filename({**info, "ext": prefer_ext}))
+    if start_time is not None and info.get("duration") is not None:
+        if start_time >= info["duration"]:
+            raise ValueError("start_time must be before the end of the source video")
 
-    # Perform download
-    with YoutubeDL(ydl_opts) as ydl:
-        result = ydl.extract_info(url, download=True)
-        # result may be a dict; after merge, _filename holds the final path
-        final_path = Path(ydl.prepare_filename(result))
-        # If merge_output_format forced a different extension, adjust
-        if final_path.suffix.lower() != f".{prefer_ext}":
-            final_path = final_path.with_suffix(f".{prefer_ext}")
+    source_request = {
+        "id": info["id"],
+        "height": prefer_height,
+        "fps": prefer_fps,
+        "ext": prefer_ext,
+        "start": None,
+        "duration": None,
+    }
+    clip_path = None
+    clip_request = None
+    if start_time is not None:
+        clip_request = {**source_request, "start": start_time, "duration": duration}
+        digest = hashlib.sha256(json.dumps(clip_request, sort_keys=True).encode()).hexdigest()[:16]
+        clip_path = source_path.with_name(f"{source_path.stem}-segment-{digest}.{prefer_ext}")
+        if not overwrite:
+            cached = _read_cached_result(clip_path, clip_request, url)
+            if cached is not None:
+                return cached
 
-    # Double-check the file exists
-    if not final_path.exists():
-        raise RuntimeError(f"download appeared to succeed but file not found: {final_path}")
-
-    log.info("downloaded: %s", final_path)
-
-    # Trim video if timestamped section was requested
-    if trim_after_download:
-        import subprocess
-        import shutil
-
-        log.info(f"Trimming video: {trim_start}s to {trim_start + trim_duration}s")
-
-        # Create trimmed output path
-        trimmed_path = final_path.with_name(f"{final_path.stem}_trimmed{final_path.suffix}")
-
-        # Use ffmpeg to trim (fast, no re-encoding)
-        ffmpeg_cmd = [
-            "ffmpeg",
-            "-y",  # Overwrite output file
-            "-ss", str(trim_start),  # Start time
-            "-i", str(final_path),  # Input file
-            "-t", str(trim_duration),  # Duration
-            "-c", "copy",  # Copy codec (no re-encode, fast!)
-            "-avoid_negative_ts", "make_zero",  # Fix timestamp issues
-            str(trimmed_path),
-        ]
-
-        try:
-            # Run ffmpeg
-            subprocess.run(
-                ffmpeg_cmd,
-                capture_output=True,
-                text=True,
-                check=True,
-            )
-            log.info("Video trimmed successfully")
-
-            # Remove original full file and rename trimmed file
-            final_path.unlink()
-            shutil.move(str(trimmed_path), str(final_path))
-            log.info(f"Replaced with trimmed version: {final_path}")
-
-        except subprocess.CalledProcessError as e:
-            log.error(f"ffmpeg trim failed: {e.stderr}")
-            # Keep the original file if trim fails
-            if trimmed_path.exists():
-                trimmed_path.unlink()
-            log.warning("Using original untrimmed file")
-
-        except Exception as e:
-            log.error(f"Trimming error: {e}")
-            if trimmed_path.exists():
-                trimmed_path.unlink()
-            log.warning("Using original untrimmed file")
-
-    return DownloadResult(
-        url=url,
-        out_path=final_path,
-        title=title or result.get("title"),
-        id=vid or result.get("id"),
-        height=(result.get("height") or info.get("height")),
-        fps=(result.get("fps") or info.get("fps")),
-        duration=(result.get("duration") or info.get("duration")),
+    # Overwriting one clip doesn't require downloading its full source again.
+    source = (
+        None
+        if overwrite and clip_path is None
+        else _read_cached_result(source_path, source_request, url)
     )
+    if source is None:
+        with YoutubeDL(options) as downloader:
+            result = downloader.extract_info(url, download=True)
+            # filepath describes the postprocessed file; prepare_filename is a fallback.
+            reported_path = result.get("filepath")
+            if reported_path:
+                final_path = Path(reported_path)
+            else:
+                final_path = Path(downloader.prepare_filename(result))
+                if not final_path.exists():
+                    final_path = final_path.with_suffix(f".{prefer_ext}")
+        if not final_path.is_file():
+            raise RuntimeError(f"download appeared to succeed but file not found: {final_path}")
+        source = DownloadResult(
+            url=url,
+            out_path=final_path,
+            title=result.get("title") or info.get("title"),
+            id=result.get("id") or info["id"],
+            height=result.get("height"),
+            fps=result.get("fps"),
+            duration=result.get("duration"),
+        )
+        _write_cached_result(source_path, source_request, source)
+    if clip_path is None:
+        return source
+
+    # Publish only after trimming and probing succeed. Keep any previous good clip.
+    temporary = clip_path.with_name(f"{clip_path.stem}.partial{clip_path.suffix}")
+    try:
+        subprocess.run(
+            [
+                "ffmpeg",
+                "-y",
+                "-ss",
+                str(start_time),
+                "-i",
+                str(source.out_path),
+                "-t",
+                str(duration),
+                "-c",
+                "copy",
+                "-avoid_negative_ts",
+                "make_zero",
+                str(temporary),
+            ],
+            capture_output=True,
+            text=True,
+            check=True,
+        )
+        media = _probe_clip(temporary)
+        temporary.replace(clip_path)
+    except (OSError, ValueError, KeyError, IndexError, subprocess.CalledProcessError) as error:
+        temporary.unlink(missing_ok=True)
+        raise RuntimeError(f"Could not create requested video segment: {error}") from error
+    clipped = source.model_copy(
+        update={
+            "out_path": clip_path,
+            "source_offset_sec": start_time,
+            "requested_duration_sec": duration,
+            **media,
+        }
+    )
+    _write_cached_result(clip_path, clip_request, clipped)
+    return clipped
