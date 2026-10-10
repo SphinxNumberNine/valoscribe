@@ -6,8 +6,10 @@ and is designed to be extensible for future streaming sources (YouTube, Twitch).
 """
 
 from __future__ import annotations
+
+import math
 from pathlib import Path
-from typing import Optional, Iterator, Callable, Protocol
+from typing import Callable, Iterator, Optional, Protocol
 
 import cv2
 import numpy as np
@@ -171,10 +173,18 @@ class VideoReader:
         self.frame_filter = frame_filter
         self.progress_callback = progress_callback
 
-        # Calculate frame interval if fps_filter is set
-        self._frame_interval = (
-            int(self._source.get_fps() / fps_filter) if fps_filter else 1
-        )
+        source_fps = self._source.get_fps()
+        if not math.isfinite(source_fps) or source_fps <= 0:
+            self._source.release()
+            raise ValueError("Video FPS must be finite and greater than zero")
+        if fps_filter is not None and (not math.isfinite(fps_filter) or fps_filter <= 0):
+            self._source.release()
+            raise ValueError("Sampling FPS must be finite and greater than zero")
+
+        # Keep fractional intervals so 29.97 FPS sampled at 4 FPS does not
+        # accidentally become 29.97 / 7 = 4.28 FPS. Requests above the source
+        # rate yield every available frame rather than dividing by zero.
+        self._frame_interval = max(1.0, source_fps / fps_filter) if fps_filter else 1.0
 
         # Seek to start position if specified
         if start_time_sec is not None:
@@ -182,7 +192,10 @@ class VideoReader:
             log.info(f"Seeking to start frame {start_frame} (time: {start_time_sec}s)")
             self._source.set_position(start_frame)
             actual_position = self._source.get_position()
-            log.info(f"After seek, actual position: {actual_position} (time: {actual_position / self._source.get_fps():.2f}s)")
+            log.info(
+                f"After seek, actual position: {actual_position} "
+                f"(time: {actual_position / source_fps:.2f}s)"
+            )
             if abs(actual_position - start_frame) > 1:
                 log.warning(
                     f"Seek imprecise: requested frame {start_frame}, got {actual_position} "
@@ -231,7 +244,12 @@ class VideoReader:
                 raise StopIteration
 
             # Apply frame interval filtering
-            if self._current_frame % self._frame_interval != 0:
+            # Select the first source frame at or after each sampling time.
+            # Deriving the target from the absolute frame index avoids drift
+            # and keeps the sampling grid stable across seeks and start ranges.
+            sample_index = math.floor(self._current_frame / self._frame_interval + 1e-9)
+            sample_frame = math.ceil(sample_index * self._frame_interval - 1e-9)
+            if self._current_frame != sample_frame:
                 self._current_frame += 1
                 continue
 
