@@ -22,6 +22,7 @@ wheels/
 
 # Virtual environments
 venv/
+.venv-ci/
 ENV/
 env/
 
@@ -42,6 +43,7 @@ htmlcov/
 # Outputs
 series_output/
 *.mp4
+!tests/fixtures/pipeline/*.mp4
 !demo.mp4
 *.avi
 *.mkv
@@ -57,3 +59,4 @@ Thumbs.db
 # Temporary
 *.tmp
 *.bak
+ci-output/

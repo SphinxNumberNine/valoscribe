@@ -1,0 +1,103 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  unit-tests:
+    name: Unit tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.11.14'
+      - uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
+        with:
+          version: '0.13.1'
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - run: uv sync --locked --extra dev
+      - run: uv run --frozen pytest -q --junitxml=ci-output/unit-tests.xml
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        if: always()
+        with:
+          name: unit-test-results
+          path: ci-output/unit-tests.xml
+          retention-days: 7
+
+  pipeline-regression:
+    name: Recorded pipeline
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+      - name: Load baseline from the PR base revision
+        if: github.event_name == 'pull_request'
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: .ci-reference
+          persist-credentials: false
+          sparse-checkout: tests/fixtures/pipeline
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: '3.11.14'
+      - uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
+        with:
+          version: '0.13.1'
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+      - name: Install system dependencies
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends tesseract-ocr ffmpeg libgl1
+      - run: uv sync --locked --extra dev
+      - name: Process and compare recorded fixture
+        shell: bash
+        run: |
+          if [ -f .ci-reference/tests/fixtures/pipeline/manifest.json ]; then
+            fixtures=.ci-reference/tests/fixtures/pipeline
+          else
+            fixtures=tests/fixtures/pipeline
+            echo 'Initial baseline bootstrap: review expected logs before merging.' >> "$GITHUB_STEP_SUMMARY"
+          fi
+          if ! uv run --frozen python -m valoscribe.validation.pipeline --fixtures "$fixtures" --output ci-output/recorded > ci-output-processing.log 2>&1; then
+            tail -n 80 ci-output-processing.log
+            exit 1
+          fi
+      - name: Preserve diagnostics
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: pipeline-regression
+          path: |
+            ci-output/recorded/
+            ci-output-processing.log
+          retention-days: 7
+
+  ci-gate:
+    name: CI Gate
+    if: always()
+    needs: [unit-tests, pipeline-regression]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 1
+    steps:
+      - name: Require every test job to succeed
+        env:
+          UNIT_RESULT: ${{ needs.unit-tests.result }}
+          PIPELINE_RESULT: ${{ needs.pipeline-regression.result }}
+        run: test "$UNIT_RESULT" = success && test "$PIPELINE_RESULT" = success

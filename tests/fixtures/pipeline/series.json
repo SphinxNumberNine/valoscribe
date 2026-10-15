@@ -1,0 +1,304 @@
+{
+  "match_url": "https://www.vlr.gg/542272?game=all&tab=overview",
+  "teams": [
+    "NRG",
+    "FNATIC"
+  ],
+  "maps": [
+    {
+      "map_number": 1,
+      "map_name": "Corrode",
+      "vod_url": "https://youtu.be/WPm6FMkZ3Qo?t=132",
+      "teams": [
+        {
+          "name": "NRG",
+          "starting_side": "defense",
+          "players": [
+            {
+              "name": "brawk",
+              "agent": "sova"
+            },
+            {
+              "name": "mada",
+              "agent": "waylay"
+            },
+            {
+              "name": "Ethan",
+              "agent": "kayo"
+            },
+            {
+              "name": "s0m",
+              "agent": "omen"
+            },
+            {
+              "name": "skuba",
+              "agent": "viper"
+            }
+          ]
+        },
+        {
+          "name": "FNATIC",
+          "starting_side": "attack",
+          "players": [
+            {
+              "name": "kaajak",
+              "agent": "yoru"
+            },
+            {
+              "name": "crashies",
+              "agent": "fade"
+            },
+            {
+              "name": "Chronicle",
+              "agent": "viper"
+            },
+            {
+              "name": "Boaster",
+              "agent": "astra"
+            },
+            {
+              "name": "Alfajer",
+              "agent": "vyse"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "map_number": 2,
+      "map_name": "Lotus",
+      "vod_url": "https://youtu.be/mprs8anB6mQ?t=128",
+      "teams": [
+        {
+          "name": "NRG",
+          "starting_side": "attack",
+          "players": [
+            {
+              "name": "mada",
+              "agent": "raze"
+            },
+            {
+              "name": "skuba",
+              "agent": "viper"
+            },
+            {
+              "name": "brawk",
+              "agent": "vyse"
+            },
+            {
+              "name": "Ethan",
+              "agent": "fade"
+            },
+            {
+              "name": "s0m",
+              "agent": "omen"
+            }
+          ]
+        },
+        {
+          "name": "FNATIC",
+          "starting_side": "defense",
+          "players": [
+            {
+              "name": "kaajak",
+              "agent": "raze"
+            },
+            {
+              "name": "Chronicle",
+              "agent": "viper"
+            },
+            {
+              "name": "Alfajer",
+              "agent": "killjoy"
+            },
+            {
+              "name": "Boaster",
+              "agent": "omen"
+            },
+            {
+              "name": "crashies",
+              "agent": "fade"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "map_number": 3,
+      "map_name": "Abyss",
+      "vod_url": "https://youtu.be/vuSp2mbOaGQ?t=136",
+      "teams": [
+        {
+          "name": "NRG",
+          "starting_side": "defense",
+          "players": [
+            {
+              "name": "skuba",
+              "agent": "vyse"
+            },
+            {
+              "name": "brawk",
+              "agent": "sova"
+            },
+            {
+              "name": "Ethan",
+              "agent": "omen"
+            },
+            {
+              "name": "mada",
+              "agent": "yoru"
+            },
+            {
+              "name": "s0m",
+              "agent": "harbor"
+            }
+          ]
+        },
+        {
+          "name": "FNATIC",
+          "starting_side": "attack",
+          "players": [
+            {
+              "name": "crashies",
+              "agent": "sova"
+            },
+            {
+              "name": "kaajak",
+              "agent": "waylay"
+            },
+            {
+              "name": "Chronicle",
+              "agent": "breach"
+            },
+            {
+              "name": "Alfajer",
+              "agent": "cypher"
+            },
+            {
+              "name": "Boaster",
+              "agent": "astra"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "map_number": 4,
+      "map_name": "Ascent",
+      "vod_url": "https://youtu.be/NvegnTMDSkQ?t=128",
+      "teams": [
+        {
+          "name": "NRG",
+          "starting_side": "defense",
+          "players": [
+            {
+              "name": "brawk",
+              "agent": "sova"
+            },
+            {
+              "name": "s0m",
+              "agent": "omen"
+            },
+            {
+              "name": "Ethan",
+              "agent": "kayo"
+            },
+            {
+              "name": "skuba",
+              "agent": "vyse"
+            },
+            {
+              "name": "mada",
+              "agent": "jett"
+            }
+          ]
+        },
+        {
+          "name": "FNATIC",
+          "starting_side": "attack",
+          "players": [
+            {
+              "name": "Alfajer",
+              "agent": "sage"
+            },
+            {
+              "name": "kaajak",
+              "agent": "yoru"
+            },
+            {
+              "name": "crashies",
+              "agent": "sova"
+            },
+            {
+              "name": "Chronicle",
+              "agent": "vyse"
+            },
+            {
+              "name": "Boaster",
+              "agent": "omen"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "map_number": 5,
+      "map_name": "Sunset",
+      "vod_url": "https://youtu.be/ax9WdIO7wtg?si=AX4j8Za8wG2rvrTE&t=135",
+      "teams": [
+        {
+          "name": "NRG",
+          "starting_side": "attack",
+          "players": [
+            {
+              "name": "Ethan",
+              "agent": "breach"
+            },
+            {
+              "name": "skuba",
+              "agent": "cypher"
+            },
+            {
+              "name": "brawk",
+              "agent": "sova"
+            },
+            {
+              "name": "s0m",
+              "agent": "omen"
+            },
+            {
+              "name": "mada",
+              "agent": "neon"
+            }
+          ]
+        },
+        {
+          "name": "FNATIC",
+          "starting_side": "defense",
+          "players": [
+            {
+              "name": "kaajak",
+              "agent": "yoru"
+            },
+            {
+              "name": "Alfajer",
+              "agent": "neon"
+            },
+            {
+              "name": "Chronicle",
+              "agent": "cypher"
+            },
+            {
+              "name": "crashies",
+              "agent": "fade"
+            },
+            {
+              "name": "Boaster",
+              "agent": "omen"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

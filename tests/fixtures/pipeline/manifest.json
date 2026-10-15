@@ -1,0 +1,44 @@
+{
+  "fixture_id": "champs2025-grand-final-corrode-round1",
+  "match_url": "https://www.vlr.gg/542272?game=all&tab=overview",
+  "map_index": 0,
+  "video": "corrode-round.mp4",
+  "dimensions": [
+    1920,
+    1080
+  ],
+  "source_fps": 4,
+  "processing_fps": 4,
+  "frame_interval": 0.25,
+  "origin": 0,
+  "frame_tolerance": 1,
+  "threshold": 98,
+  "required_types": [
+    "round_start",
+    "round_end",
+    "match_start",
+    "kill",
+    "ability_used",
+    "spike_plant"
+  ],
+  "type_thresholds": {
+    "kill": 95,
+    "spike_plant": 100
+  },
+  "min_frames": 300,
+  "source": {
+    "url": "https://youtu.be/WPm6FMkZ3Qo",
+    "start": 132,
+    "duration": 120,
+    "note": "Captured section, sampled at 4 FPS and encoded H.264 CRF 28. Fixed bytes are authoritative."
+  },
+  "sha256": {
+    "vlr.html": "39c6051a23de7e40363161c3ea07d541c42c3cbec2369ba46f0aa427242f6c38",
+    "series.json": "ce64414f0217e406233a4a350c70876b03eb41e323f3120005c8fe9c2f6ae709",
+    "metadata.json": "85f865f22c8455cc99f0dca5f11eb9af7f92fba09fdf1f130a3021bfb0b88c0f",
+    "corrode-round.mp4": "f5bc0081cf628ae376e551315d67c85b026f2caed28579e9fa3649e327d4bfe5",
+    "baseline.jsonl": "6ac80cc52978a9625ed23f8b5aa5968c89187a9f43fbddaa2863bbe22cb8927e"
+  },
+  "baseline_revision": "95e6be2d9ba3153374a697597b264838d33ad5b4",
+  "baseline_note": "Initial baseline after current-main shared Astra charge validation; 43 events."
+}

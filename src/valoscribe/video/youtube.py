@@ -171,6 +171,47 @@ def _probe_clip(path: Path) -> dict:
     return {"duration": duration, "height": stream.get("height"), "fps": fps}
 
 
+def _download_youtube_section(
+    url: str, out_dir: Path, *, start_time, duration, prefer_height, prefer_fps,
+    overwrite, rate_limit,
+) -> DownloadResult:
+    """Download only an explicit range; never fall back to a full-VOD download."""
+    from yt_dlp.utils import download_range_func
+
+    if (start_time is None or duration is None or not math.isfinite(start_time)
+            or not math.isfinite(duration) or start_time < 0 or duration <= 0):
+        raise ValueError("section_only requires finite start_time >= 0 and duration > 0")
+    request = {'url': url, 'start': start_time, 'duration': duration,
+               'height': prefer_height, 'fps': prefer_fps, 'section_only': True}
+    identity = hashlib.sha256(json.dumps(request, sort_keys=True).encode()).hexdigest()[:16]
+    out_dir.mkdir(parents=True, exist_ok=True)
+    path = out_dir / f'section-{identity}.mp4'
+    if not overwrite:
+        cached = _read_cached_result(path, request, url)
+        if cached:
+            return cached
+    options = {
+        'format': f'bestvideo[height<={prefer_height}][fps<={prefer_fps}][vcodec^=avc1][ext=mp4]',
+        'outtmpl': str(path),
+        'download_ranges': download_range_func(None, [(start_time, start_time + duration)]),
+        'force_keyframes_at_cuts': True,
+        'noplaylist': True, 'overwrites': True,
+        'retries': 2, 'fragment_retries': 2, 'socket_timeout': 20,
+        'quiet': True, 'ratelimit': rate_limit,
+    }
+    with YoutubeDL(options) as ydl:
+        info = ydl.extract_info(url, download=True)
+    if not path.is_file() or not path.stat().st_size:
+        raise RuntimeError('Section download produced no video')
+    media = _probe_clip(path)
+    if not duration - 2 <= media['duration'] <= duration + 2:
+        raise ValueError('Section duration differs from requested bounds')
+    result = DownloadResult(url=url, out_path=path, title=info.get('title'), id=info.get('id'),
+                            source_offset_sec=start_time, requested_duration_sec=duration, **media)
+    _write_cached_result(path, request, result)
+    return result
+
+
 def download_youtube(
     url: str,
     out_dir: str | Path,
@@ -183,6 +224,7 @@ def download_youtube(
     on_progress: Optional[Callable[[Dict[str, Any]], None]] = None,
     start_time: Optional[float] = None,
     duration: Optional[float] = None,
+    section_only: bool = False,
 ) -> DownloadResult:
     """Download a full VOD or a separately cached, stream-copied segment.
 
@@ -193,6 +235,12 @@ def download_youtube(
     Segment metadata records the requested source offset and measured duration.
     Stream copy retains ffmpeg's keyframe-dependent seek precision.
     """
+    if section_only:
+        return _download_youtube_section(
+            url, Path(out_dir), start_time=start_time, duration=duration,
+            prefer_height=prefer_height, prefer_fps=prefer_fps,
+            overwrite=overwrite, rate_limit=rate_limit,
+        )
     if start_time is None:
         parsed = urllib.parse.urlparse(url)
         query = urllib.parse.parse_qs(parsed.query)
