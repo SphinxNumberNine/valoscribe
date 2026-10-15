@@ -1,0 +1,65 @@
+{
+  "map": "Corrode",
+  "teams": [
+    {
+      "name": "NRG",
+      "starting_side": "defense"
+    },
+    {
+      "name": "FNATIC",
+      "starting_side": "attack"
+    }
+  ],
+  "players": [
+    {
+      "name": "brawk",
+      "team": "NRG",
+      "agent": "sova"
+    },
+    {
+      "name": "mada",
+      "team": "NRG",
+      "agent": "waylay"
+    },
+    {
+      "name": "Ethan",
+      "team": "NRG",
+      "agent": "kayo"
+    },
+    {
+      "name": "s0m",
+      "team": "NRG",
+      "agent": "omen"
+    },
+    {
+      "name": "skuba",
+      "team": "NRG",
+      "agent": "viper"
+    },
+    {
+      "name": "kaajak",
+      "team": "FNATIC",
+      "agent": "yoru"
+    },
+    {
+      "name": "crashies",
+      "team": "FNATIC",
+      "agent": "fade"
+    },
+    {
+      "name": "Chronicle",
+      "team": "FNATIC",
+      "agent": "viper"
+    },
+    {
+      "name": "Boaster",
+      "team": "FNATIC",
+      "agent": "astra"
+    },
+    {
+      "name": "Alfajer",
+      "team": "FNATIC",
+      "agent": "vyse"
+    }
+  ]
+}

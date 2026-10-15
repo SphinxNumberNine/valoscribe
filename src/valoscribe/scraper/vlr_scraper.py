@@ -87,7 +87,11 @@ class VLRScraper:
         response = self.session.get(match_url, timeout=self.timeout)
         response.raise_for_status()
 
-        soup = BeautifulSoup(response.text, 'html.parser')
+        return self.parse_match_html(response.text, match_url)
+
+    def parse_match_html(self, html: str, match_url: str) -> dict:
+        """Parse a saved or fetched page using the same production extraction path."""
+        soup = BeautifulSoup(html, 'html.parser')
 
         # Extract team names and logos
         teams, team_logos = self._extract_team_names(soup)
@@ -181,6 +185,17 @@ class VLRScraper:
         """
         vod_urls = []
 
+        # Current VLR embeds use icon-only links; labels live in their parent.
+        embeds = soup.select('.sm-vod[data-site="youtube"]')
+        if embeds:
+            for embed in embeds:
+                link = embed.select_one('a[href]')
+                if link and urlparse(link['href']).hostname in {
+                    'youtu.be', 'youtube.com', 'www.youtube.com'
+                }:
+                    vod_urls.append(link['href'])
+            return vod_urls
+
         # Find the match streams/VODs section
         streams_section = soup.find('div', class_='match-streams-bets-container')
 
@@ -214,7 +229,7 @@ class VLRScraper:
 
         if nav:
             # Find all map selector items
-            map_items = nav.find_all('div', class_='vm-stats-gamesnav-item')
+            map_items = nav.find_all(class_='vm-stats-gamesnav-item')
 
             for item in map_items:
                 game_id = item.get('data-game-id')
@@ -264,6 +279,37 @@ class VLRScraper:
             Dictionary with map data or None if extraction failed
         """
         try:
+            # Current VLR statistics are div-based rather than HTML tables.
+            modern_games = [game for game in soup.select('.vm-stats-game')
+                            if game.get('data-game-id') != 'all']
+            if modern_games and modern_games[container_index].select('.ovw-table'):
+                game = modern_games[container_index]
+                team_data = []
+                tables = game.select('.ovw-table')
+                first_round = game.select_one('.vlr-rounds-row-col[title]')
+                squares = first_round.select('.rnd-sq') if first_round else []
+                winner = next((i for i, sq in enumerate(squares)
+                               if 'mod-win' in sq.get('class', [])), None)
+                if winner is None or len(tables) != 2:
+                    raise ValueError('Missing round sides or team statistics')
+                winner_attacks = 'mod-t' in squares[winner].get('class', [])
+                for index, (team, table) in enumerate(zip(teams, tables)):
+                    players = []
+                    for row in table.select('.ovw-row'):
+                        name = row.select_one('.ovw-player-name')
+                        agent = row.select_one('.ovw-agents img[title]')
+                        if name and agent:
+                            players.append({'name': name.get_text(strip=True),
+                                            'agent': agent['title'].lower()})
+                    if len(players) != 5:
+                        raise ValueError(f'Expected five players for {team}, got {len(players)}')
+                    attacks = winner_attacks if index == winner else not winner_attacks
+                    team_data.append({'name': team,
+                                      'starting_side': 'attack' if attacks else 'defense',
+                                      'players': players})
+                return {'map_number': map_number, 'map_name': map_name,
+                        'vod_url': vod_url, 'teams': team_data}
+
             # Extract players from both team tables for this specific map
             all_players = self._extract_players(soup, teams, container_index)
 

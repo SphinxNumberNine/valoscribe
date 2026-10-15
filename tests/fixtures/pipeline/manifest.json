@@ -1,0 +1,42 @@
+{
+  "fixture_id": "champs2025-grand-final-corrode-round1",
+  "match_url": "https://www.vlr.gg/542272?game=all&tab=overview",
+  "map_index": 0,
+  "video": "corrode-round.mp4",
+  "dimensions": [
+    1920,
+    1080
+  ],
+  "source_fps": 4,
+  "processing_fps": 4,
+  "frame_interval": 0.25,
+  "origin": 0,
+  "frame_tolerance": 1,
+  "threshold": 98,
+  "required_types": [
+    "round_start",
+    "round_end",
+    "match_start",
+    "kill",
+    "ability_used",
+    "spike_plant"
+  ],
+  "type_thresholds": {
+    "kill": 95,
+    "spike_plant": 100
+  },
+  "min_frames": 300,
+  "source": {
+    "url": "https://youtu.be/WPm6FMkZ3Qo",
+    "start": 132,
+    "duration": 120,
+    "note": "Captured section, sampled at 4 FPS and encoded H.264 CRF 28. Fixed bytes are authoritative."
+  },
+  "sha256": {
+    "vlr.html": "3afe6f49c2f849b9aa9917f7e56ffeef9c0e4da5b6b54aca74e2a911356615ae",
+    "series.json": "f66514e3013531db11533c89f4a9838b42aa0186dda245cff631d700331698ee",
+    "metadata.json": "c240f400634d80d29c03f970fc60f510e67358c49b407c957f71741beb7bb0a6",
+    "corrode-round.mp4": "f5bc0081cf628ae376e551315d67c85b026f2caed28579e9fa3649e327d4bfe5",
+    "baseline.jsonl": "3af9b391856ea383a27ffb961f05993581f978b931272aca7b7e0ce9d4d29dea"
+  }
+}
