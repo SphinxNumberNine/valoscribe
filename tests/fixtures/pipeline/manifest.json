@@ -33,10 +33,12 @@
     "note": "Captured section, sampled at 4 FPS and encoded H.264 CRF 28. Fixed bytes are authoritative."
   },
   "sha256": {
-    "vlr.html": "3afe6f49c2f849b9aa9917f7e56ffeef9c0e4da5b6b54aca74e2a911356615ae",
-    "series.json": "f66514e3013531db11533c89f4a9838b42aa0186dda245cff631d700331698ee",
-    "metadata.json": "c240f400634d80d29c03f970fc60f510e67358c49b407c957f71741beb7bb0a6",
+    "vlr.html": "39c6051a23de7e40363161c3ea07d541c42c3cbec2369ba46f0aa427242f6c38",
+    "series.json": "ce64414f0217e406233a4a350c70876b03eb41e323f3120005c8fe9c2f6ae709",
+    "metadata.json": "85f865f22c8455cc99f0dca5f11eb9af7f92fba09fdf1f130a3021bfb0b88c0f",
     "corrode-round.mp4": "f5bc0081cf628ae376e551315d67c85b026f2caed28579e9fa3649e327d4bfe5",
-    "baseline.jsonl": "3af9b391856ea383a27ffb961f05993581f978b931272aca7b7e0ce9d4d29dea"
-  }
+    "baseline.jsonl": "6ac80cc52978a9625ed23f8b5aa5968c89187a9f43fbddaa2863bbe22cb8927e"
+  },
+  "baseline_revision": "95e6be2d9ba3153374a697597b264838d33ad5b4",
+  "baseline_note": "Initial baseline after current-main shared Astra charge validation; 43 events."
 }

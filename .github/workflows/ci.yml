@@ -3,7 +3,7 @@ name: CI
 on:
   pull_request:
   push:
-    branches: [main, codex/pipeline-ci]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
@@ -75,7 +75,10 @@ jobs:
             fixtures=tests/fixtures/pipeline
             echo 'Initial baseline bootstrap: review expected logs before merging.' >> "$GITHUB_STEP_SUMMARY"
           fi
-          uv run --frozen python -m valoscribe.validation.pipeline --fixtures "$fixtures" --output ci-output/recorded > ci-output-processing.log 2>&1
+          if ! uv run --frozen python -m valoscribe.validation.pipeline --fixtures "$fixtures" --output ci-output/recorded > ci-output-processing.log 2>&1; then
+            tail -n 80 ci-output-processing.log
+            exit 1
+          fi
       - name: Preserve diagnostics
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4

@@ -207,7 +207,7 @@ def _download_youtube_section(
     if not duration - 2 <= media['duration'] <= duration + 2:
         raise ValueError('Section duration differs from requested bounds')
     result = DownloadResult(url=url, out_path=path, title=info.get('title'), id=info.get('id'),
-                            source_start_sec=start_time, requested_duration_sec=duration, **media)
+                            source_offset_sec=start_time, requested_duration_sec=duration, **media)
     _write_cached_result(path, request, result)
     return result
 

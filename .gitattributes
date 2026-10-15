@@ -1,0 +1,2 @@
+# Regression fixture hashes must describe identical bytes on Windows and Linux.
+tests/fixtures/pipeline/* -text

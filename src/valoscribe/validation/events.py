@@ -85,7 +85,7 @@ def validate_events(events: list[dict]) -> None:
                     raise ValueError(f"Event {number}: invalid timer")
 
 
-def load_events(path: Path) -> list[dict]:
+def load_events(path: Path, *, allow_empty=False) -> list[dict]:
     text = Path(path).read_text(encoding="utf-8-sig")
     if text.lstrip().startswith("["):
         events = json.loads(text)
@@ -99,13 +99,23 @@ def load_events(path: Path) -> list[dict]:
                     events.append(json.loads(line))
                 except ValueError as error:
                     raise ValueError(f"{path}:{line_number}: {error}") from error
-    validate_events(events)
+    if events or not allow_empty:
+        validate_events(events)
     return events
 
 
-def _frame(event: dict, interval: float, origin: float) -> int:
+def _frame(event: dict, interval: float, origin: float, source_fps=None) -> int:
     position = (event["timestamp"] - origin) / interval
     index = math.floor(position + 0.5)
+    if source_fps is not None:
+        # VideoReader rounds sampling instants up to the next available source frame.
+        source_position = (event["timestamp"] - origin) * source_fps
+        source_index = round(source_position)
+        index = math.floor(source_index / (interval * source_fps) + 1e-8)
+        expected_source = math.ceil(index * interval * source_fps - 1e-8)
+        if abs(source_index - source_position) > 1e-3 or source_index != expected_source:
+            raise ValueError("Event timestamp is off the source sampling lattice")
+        position = index
     # Float serialization is tolerated, but off-grid events cannot silently widen the window.
     if index < 0 or abs(position - index) > 1e-3:
         raise ValueError(f"Event timestamp {event['timestamp']} is off the sampling lattice")
@@ -156,12 +166,17 @@ def compare_events(
     threshold=98.0,
     critical_types=CRITICAL_TYPES,
     type_thresholds=None,
+    source_fps=None,
 ):
     """Return F1/Dice percentage and diagnostics; invalid/empty logs raise ValueError."""
     if not math.isfinite(frame_interval) or frame_interval <= 0:
         raise ValueError("frame_interval must be positive and finite")
     if not math.isfinite(origin) or origin < 0:
         raise ValueError("origin must be nonnegative and finite")
+    if source_fps is not None and (
+        not math.isfinite(source_fps) or source_fps <= 0 or frame_interval * source_fps < 1
+    ):
+        raise ValueError("source-fps must be finite and at least the sampling FPS")
     if type(frame_tolerance) is not int or frame_tolerance < 0:
         raise ValueError("frame_tolerance must be a nonnegative integer")
     if not math.isfinite(threshold) or not 0 <= threshold <= 100:
@@ -178,7 +193,7 @@ def compare_events(
     groups = [defaultdict(list), defaultdict(list)]
     frames = []
     for events, group in zip((reference, candidate), groups):
-        indices = [_frame(event, frame_interval, origin) for event in events]
+        indices = [_frame(event, frame_interval, origin, source_fps) for event in events]
         frames.append(indices)
         for number, (event, frame) in enumerate(zip(events, indices)):
             payload = {key: value for key, value in event.items() if key not in IGNORED_FIELDS}
@@ -267,6 +282,9 @@ def main(argv=None):
     timing.add_argument("--frame-interval", type=float, help="Actual seconds per processed frame")
     timing.add_argument("--sample-fps", type=float, help="Actual processed FPS, not video FPS")
     parser.add_argument("--origin", type=float, default=0.0)
+    parser.add_argument(
+        "--source-fps", type=float, help="Source video FPS for rounded sampling grids"
+    )
     parser.add_argument("--frame-tolerance", type=int, default=1)
     parser.add_argument("--threshold", type=float, default=98.0)
     parser.add_argument("--type-threshold", action="append", default=[], metavar="TYPE=PERCENT")
@@ -280,12 +298,7 @@ def main(argv=None):
             interval = 1 / args.sample_fps
         floors = dict(item.split("=", 1) for item in args.type_threshold)
         # Allow one empty file so a missing/extra entire output scores zero.
-        logs = [
-            load_events(path)
-            if path.read_text(encoding="utf-8-sig").strip() not in ("", "[]")
-            else []
-            for path in (args.reference, args.candidate)
-        ]
+        logs = [load_events(path, allow_empty=True) for path in (args.reference, args.candidate)]
         result = compare_events(
             *logs,
             frame_interval=interval,
@@ -293,6 +306,7 @@ def main(argv=None):
             frame_tolerance=args.frame_tolerance,
             threshold=args.threshold,
             type_thresholds={key: float(value) for key, value in floors.items()},
+            source_fps=args.source_fps,
         )
         if args.report:
             args.report.parent.mkdir(parents=True, exist_ok=True)

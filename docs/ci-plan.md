@@ -1,6 +1,6 @@
 # CI and event regression plan
 
-Status: proposed implementation plan. No workflows, branch rules, or billing settings have been applied.
+Original design plan. See [ci.md](ci.md) for the implemented workflow, usage, coverage, and account-setting status.
 
 ## Goals and decisions
 

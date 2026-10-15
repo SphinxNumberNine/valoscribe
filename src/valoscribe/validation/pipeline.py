@@ -110,7 +110,8 @@ def run_recorded(fixtures: Path, output: Path):
     summary = (
         f"### Recorded pipeline: {policy['fixture_id']}\n\n"
         f"Similarity **{result['similarity_percent']:.2f}%**; required {policy['threshold']}%. "
-        f"Matched {result['matched']}; missing {len(result['missing'])}; extra {len(result['extra'])}.\n\n"
+        f"Matched {result['matched']}; missing {len(result['missing'])}; "
+        f"extra {len(result['extra'])}.\n\n"
         f"Frames: {structure['frames']}; structural validation passed.\n\n"
         "| Event | Reference | Candidate | Similarity |\n|---|---:|---:|---:|\n"
     )

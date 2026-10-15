@@ -2,6 +2,7 @@
 
 import itertools
 import json
+import math
 
 import pytest
 
@@ -58,6 +59,38 @@ def test_fractional_sampling_interval_and_origin():
     assert compare_events(reference, candidate, frame_interval=interval, origin=2)["passed"]
     with pytest.raises(ValueError, match="lattice"):
         compare_events(reference, candidate)
+
+
+def test_current_fractional_source_sampling_grid():
+    source_fps = 30000 / 1001
+    def timestamp(index):
+        return math.ceil(index * source_fps / 4 - 1e-8) / source_fps
+    for index in range(1, 100):
+        reference = [event(timestamp=timestamp(index))]
+        assert compare_events(
+            reference, [event(timestamp=timestamp(index + 1))], source_fps=source_fps
+        )["passed"]
+        assert not compare_events(
+            reference, [event(timestamp=timestamp(index + 2))], source_fps=source_fps
+        )["passed"]
+    with pytest.raises(ValueError, match="lattice"):
+        compare_events([event(timestamp=1 / source_fps)], [event()], source_fps=source_fps)
+
+
+def test_matching_score_is_symmetric():
+    reference = [event(1), event(3), event(4), event(7)]
+    candidate = [event(0), event(2), event(5)]
+    forward = compare_events(reference, candidate)
+    backward = compare_events(candidate, reference)
+    assert forward["similarity_percent"] == backward["similarity_percent"]
+    assert forward["matched"] == backward["matched"]
+
+
+def test_required_semantic_fields_cannot_disappear():
+    invalid = event()
+    invalid.pop("ability")
+    with pytest.raises(ValueError, match="ability"):
+        compare_events([invalid], [invalid])
 
 
 def test_empty_and_invalid_inputs():
