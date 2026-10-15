@@ -78,11 +78,6 @@ class VLRScraper:
             separator = '&' if '?' in match_url else '?'
             match_url = f"{match_url}{separator}game=all&tab=overview"
 
-        # Extract base URL
-        parsed_url = urlparse(match_url)
-        base_url = f"{parsed_url.scheme}://{parsed_url.netloc}"
-        match_path = parsed_url.path
-
         # Fetch the main match page with game=all
         response = self.session.get(match_url, timeout=self.timeout)
         response.raise_for_status()
