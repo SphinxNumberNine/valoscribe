@@ -469,6 +469,28 @@ The system should work with any 1080p Valorant broadcast that uses the standard 
 - **Frame state samples** - ~2,000-5,000 rows per map
 - **Opening matches excluded** - the first 8 series of the event used a slightly different version of the HUD, and therefore were not processed in this first iteration. Working on processing these.
 
+## What Changed
+
+A human-readable record of approved changes, newest first. Every merged PR appends one
+entry here, independent of the commit log, so users can see what changed between releases
+and reviewers can check that behavior moved only where intended.
+
+Add an entry when a PR is approved:
+
+```markdown
+### PR #<number> — <title> (<YYYY-MM-DD>)
+- Changed: <what moved, in one or two lines>
+- Observable: <what a user running the CLI would notice, or "none">
+- Verified: `uv run pytest -q` and the recorded pipeline (43 events, 100%) pass
+```
+
+Keep entries short and describe behavior, not implementation details. If a change is not
+user-visible, say "Observable: none" rather than omitting the entry.
+
+<!-- Entries, newest first -->
+
+_No merged PRs beyond the upstream history this branch starts from._
+
 ## Contributing
 
 Contributions are welcome! Areas for improvement:
