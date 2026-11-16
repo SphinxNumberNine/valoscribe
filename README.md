@@ -469,6 +469,15 @@ The system should work with any 1080p Valorant broadcast that uses the standard 
 - **Frame state samples** - ~2,000-5,000 rows per map
 - **Opening matches excluded** - the first 8 series of the event used a slightly different version of the HUD, and therefore were not processed in this first iteration. Working on processing these.
 
+### Optional: ffmpeg decoding
+
+By default frames are decoded with OpenCV, which decodes and converts every source frame even
+though only one frame in `source_fps / 4` is analysed. Setting `VALOSCRIBE_FRAME_SOURCE=ffmpeg`
+(and `VALOSCRIBE_FFMPEG` if `ffmpeg` is not on `PATH`) decodes through an ffmpeg subprocess
+instead. In local testing on 1080p60 VODs this cut wall time by 1.5-2.8x with identical events on
+5 of 6 clips; decoder pixel differences can move threshold-sensitive ability blips by one frame,
+so OpenCV stays the default.
+
 ## Contributing
 
 Contributions are welcome! Areas for improvement:
