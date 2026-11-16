@@ -114,6 +114,11 @@ class DetectorRegistry:
         self.killfeed_detector = KillfeedDetector(
             self.cropper,
             agents=agent_list,
+            # Killfeed slots are scanned top-down and most frames have at most one entry.
+            # Stopping after two consecutive empty entries was 4.9x faster on the recorded
+            # fixture with identical detections there (see HANDOFF.md). Set to 0 to scan all
+            # ten slots unconditionally.
+            max_consecutive_empty_entries=2,
         )
 
         log.debug("Killfeed detector initialized")

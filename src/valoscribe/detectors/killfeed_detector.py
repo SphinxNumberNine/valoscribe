@@ -35,6 +35,8 @@ class KillfeedDetector:
         min_confidence: float = 0.75,
         match_method: int = cv2.TM_CCOEFF_NORMED,
         agents: Optional[list[str]] = None,
+        match_scale: float = 1.0,
+        max_consecutive_empty_entries: int = 0,
     ):
         """
         Initialize killfeed detector.
@@ -46,11 +48,24 @@ class KillfeedDetector:
             min_confidence: Minimum template match confidence (0-1)
             match_method: OpenCV template matching method
             agents: Optional list of agent names to limit matching to. If None, uses all templates.
+            match_scale: Downscale factor applied to entry crops and templates before matching
+                         (1.0 = full resolution). Lower values are faster but need a re-tuned
+                         min_confidence; see HANDOFF.md for measured accuracy impact.
+            max_consecutive_empty_entries: Stop scanning after this many consecutive entries
+                         without candidates (0 = scan all 10 slots, the safe default). Killfeed
+                         slots are assigned per entry and gaps were measured below slot 0, so
+                         this is a heuristic speed knob, not a guarantee.
         """
         self.cropper = cropper
         self.min_confidence = min_confidence
         self.match_method = match_method
         self.agents = agents
+        if not 0.1 <= match_scale <= 1.0:
+            raise ValueError(f"match_scale must be within (0.1, 1.0], got {match_scale}")
+        if max_consecutive_empty_entries < 0:
+            raise ValueError("max_consecutive_empty_entries must be >= 0")
+        self.match_scale = float(match_scale)
+        self.max_consecutive_empty_entries = max_consecutive_empty_entries
 
         # Set default template directory if not provided
         if template_dir is None:
@@ -59,6 +74,7 @@ class KillfeedDetector:
 
         self.template_dir = Path(template_dir)
         self.templates = self._load_templates()
+        self._prepare_templates()
 
         if agents:
             log.info(
@@ -71,6 +87,26 @@ class KillfeedDetector:
                 f"Killfeed detector initialized (min_confidence: {min_confidence}, "
                 f"templates: {len(self.templates)}, method: {match_method})"
             )
+
+    def _prepare_templates(self) -> None:
+        """Cache flipped and downscaled template copies used during matching."""
+        for template in self.templates.values():
+            image = template["image"]
+            template["image_flipped"] = cv2.flip(image, 1)
+
+            if self.match_scale == 1.0:
+                template["image_match"] = image
+                template["image_match_flipped"] = template["image_flipped"]
+                continue
+
+            height, width = image.shape[:2]
+            size = (
+                max(1, int(round(width * self.match_scale))),
+                max(1, int(round(height * self.match_scale))),
+            )
+            scaled = cv2.resize(image, size, interpolation=cv2.INTER_AREA)
+            template["image_match"] = scaled
+            template["image_match_flipped"] = cv2.flip(scaled, 1)
 
     def _load_templates(self) -> dict[str, dict]:
         """
@@ -164,8 +200,10 @@ class KillfeedDetector:
         """
         Detect kills from killfeed entries.
 
-        Processes all entries (0-9) regardless of empty slots, since kills can appear
-        in lower slots even when upper slots are empty (stale entries expire first).
+        Entries are scanned top-down. Slots are assigned per kill entry and can stay occupied
+        below an empty slot (measured on the pipeline fixture), so by default every entry is
+        scanned. ``max_consecutive_empty_entries`` trades recall for speed for callers that can
+        tolerate the risk.
 
         Args:
             frame: Input frame (1080p)
@@ -183,50 +221,65 @@ class KillfeedDetector:
 
         # Collect all candidate combinations from all entries
         all_candidates = []
+        consecutive_empty = 0
 
         for entry_idx, entry_crop in enumerate(killfeed_entries):
             if entry_crop.size == 0:
                 log.debug(f"Entry {entry_idx}: empty crop, skipping")
-                continue  # Skip this entry but continue checking others
+                consecutive_empty += 1
+                if self._stop_after(consecutive_empty):
+                    break
+                continue
+
+            # Preprocess once; the killer and victim passes share the same image
+            preprocessed = self._preprocess_crop(entry_crop)
 
             # Get all candidate combinations for this entry (sorted by confidence)
-            entry_candidates = self._detect_entry(entry_crop, entry_idx)
+            entry_candidates = self._detect_entry(preprocessed, entry_idx)
 
             if not entry_candidates:
-                # No candidates in this entry, but continue checking remaining entries
                 log.debug(f"Entry {entry_idx}: no candidates found")
+                consecutive_empty += 1
+                if self._stop_after(consecutive_empty):
+                    break
                 continue
 
             # Add all candidates from this entry
+            consecutive_empty = 0
             all_candidates.extend(entry_candidates)
 
         return all_candidates
 
+    def _stop_after(self, consecutive_empty: int) -> bool:
+        """Whether a run of empty entries should end the scan."""
+        limit = self.max_consecutive_empty_entries
+        return bool(limit) and consecutive_empty >= limit
+
     def _detect_entry(
-        self, entry_crop: np.ndarray, entry_idx: int
+        self, preprocessed: np.ndarray, entry_idx: int
     ) -> list[tuple[int, KillfeedAgentDetection]]:
         """
-        Detect killer and victim from a single killfeed entry.
+        Detect killer and victim from a single preprocessed killfeed entry.
 
         Returns ALL candidate combinations above threshold for validation,
         tagged with entry index.
 
         Args:
-            entry_crop: Cropped killfeed entry
+            preprocessed: Preprocessed (and optionally downscaled) killfeed entry
             entry_idx: Entry index for logging
 
         Returns:
             List of (entry_idx, KillfeedAgentDetection) tuples sorted by confidence (high to low)
         """
         # Step 1: Match killer (all candidates above threshold)
-        killer_candidates = self._match_all_templates_candidates(entry_crop, flipped=False)
+        killer_candidates = self._match_all_templates_candidates(preprocessed, flipped=False)
 
         if not killer_candidates:
             log.debug(f"Entry {entry_idx}: no killer detected")
             return []
 
         # Step 2: Match victim (all candidates above threshold)
-        victim_candidates = self._match_all_templates_candidates(entry_crop, flipped=True)
+        victim_candidates = self._match_all_templates_candidates(preprocessed, flipped=True)
 
         if not victim_candidates:
             log.debug(
@@ -262,30 +315,26 @@ class KillfeedDetector:
         return detections
 
     def _match_all_templates_candidates(
-        self, crop: np.ndarray, flipped: bool = False
+        self, preprocessed: np.ndarray, flipped: bool = False
     ) -> list[tuple[str, str, float]]:
         """
         Match all agent templates and return ALL candidates above threshold.
 
         Args:
-            crop: Cropped killfeed entry
-            flipped: If True, flip templates horizontally before matching (for victim)
+            preprocessed: Preprocessed killfeed entry (already scaled by match_scale)
+            flipped: If True, match against the horizontally flipped templates (for victim)
 
         Returns:
             List of (agent_name, side, confidence) tuples sorted by confidence (high to low)
         """
-        preprocessed = self._preprocess_crop(crop)
+        image_key = "image_match_flipped" if flipped else "image_match"
         candidates = []
 
         # Try matching each template
         for template_key, template_data in self.templates.items():
-            template_img = template_data["image"]
+            template_img = template_data[image_key]
             agent_name = template_data["agent"]
             side = template_data["side"]
-
-            # Flip template if needed (for victim detection)
-            if flipped:
-                template_img = cv2.flip(template_img, 1)
 
             # Skip if template is larger than crop
             if template_img.shape[0] > preprocessed.shape[0] or template_img.shape[1] > preprocessed.shape[1]:
@@ -327,6 +376,7 @@ class KillfeedDetector:
         """
         # No preprocessing - use color templates directly
         preprocessed = self._preprocess_crop(crop)
+        image_key = "image_match_flipped" if flipped else "image_match"
 
         best_confidence = 0.0
         best_agent = None
@@ -334,13 +384,9 @@ class KillfeedDetector:
 
         # Try matching each template
         for template_key, template_data in self.templates.items():
-            template_img = template_data["image"]
+            template_img = template_data[image_key]
             agent_name = template_data["agent"]
             side = template_data["side"]
-
-            # Flip template if needed (for victim detection)
-            if flipped:
-                template_img = cv2.flip(template_img, 1)
 
             # Skip if template is larger than crop (can't match)
             if template_img.shape[0] > preprocessed.shape[0] or template_img.shape[1] > preprocessed.shape[1]:
@@ -384,7 +430,9 @@ class KillfeedDetector:
         """
         Preprocess killfeed crop for template matching.
 
-        Uses minimal preprocessing to preserve color detail.
+        Uses minimal preprocessing to preserve color detail, then optionally downscales
+        by ``match_scale``. The BGR fast path returns a read-only view of the input;
+        ``cv2.matchTemplate`` never mutates its inputs.
 
         Args:
             crop: Cropped killfeed entry
@@ -401,6 +449,15 @@ class KillfeedDetector:
             preprocessed = cv2.cvtColor(crop, cv2.COLOR_BGRA2BGR)
         else:
             # Already BGR
-            preprocessed = crop.copy()
+            preprocessed = crop
+
+        if self.match_scale != 1.0:
+            preprocessed = cv2.resize(
+                preprocessed,
+                None,
+                fx=self.match_scale,
+                fy=self.match_scale,
+                interpolation=cv2.INTER_AREA,
+            )
 
         return preprocessed
