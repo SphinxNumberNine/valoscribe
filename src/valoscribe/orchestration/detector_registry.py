@@ -114,6 +114,12 @@ class DetectorRegistry:
         self.killfeed_detector = KillfeedDetector(
             self.cropper,
             agents=agent_list,
+            # Killfeed entries stack from slot 0 down; an entry was never observed below an empty
+            # slot in 1,432 sampled frames across four broadcast matches (see the PR validation).
+            # Scanning stops after three consecutive empty entries, i.e. slots 0-2 are always
+            # checked: one slot of margin over the deepest first-hit slot observed, at ~4.6x
+            # faster matching than scanning all ten. Set to 0 to scan every slot unconditionally.
+            max_consecutive_empty_entries=3,
         )
 
         log.debug("Killfeed detector initialized")
